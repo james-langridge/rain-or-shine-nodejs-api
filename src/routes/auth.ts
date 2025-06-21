@@ -231,9 +231,6 @@ authRouter.get(
         requestId,
       });
 
-      // Ensure webhook subscription exists
-      await ensureWebhooksInitialized();
-
       // Generate JWT session and set secure cookie
       const token = generateJWT(user.id, user.stravaAthleteId);
       setAuthCookie(res, token);
