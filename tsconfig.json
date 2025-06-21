@@ -26,5 +26,14 @@
     "verbatimModuleSyntax": false
   },
   "include": ["api/**/*", "src/**/*", "scripts/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/test/**",
+    "src/test/**",
+    "**/testUtils.ts",
+    "src/services/__tests__/**"
+  ]
 }
