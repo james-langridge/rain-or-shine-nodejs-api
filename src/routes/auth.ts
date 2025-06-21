@@ -241,7 +241,7 @@ authRouter.get(
       });
 
       // Redirect to success page
-      res.redirect(`${config.APP_URL}/auth/success`);
+      res.redirect(`${process.env.FRONTEND_URL}/auth/success`);
     } catch (dbError) {
       logger.error("Database error during OAuth flow", {
         error: dbError,
@@ -251,7 +251,7 @@ authRouter.get(
       const errorMsg =
         OAUTH_ERROR_MESSAGES.database_error || "Database error occurred";
       return res.redirect(
-        `${config.APP_URL}/auth/error?error=${encodeURIComponent(errorMsg)}`,
+        `${process.env.FRONTEND_URL}/auth/error?error=${encodeURIComponent(errorMsg)}`,
       );
     }
   }),
