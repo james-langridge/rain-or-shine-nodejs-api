@@ -59,10 +59,6 @@ USER nodejs
 
 EXPOSE 3001
 
-# Add health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3001/api/health', (r) => r.statusCode === 200 ? process.exit(0) : process.exit(1))"
-
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
