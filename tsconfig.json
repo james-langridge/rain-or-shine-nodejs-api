@@ -19,7 +19,7 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./",
+    "rootDir": "./src",
     "types": ["node"],
     "resolveJsonModule": true,
     "isolatedModules": true,
