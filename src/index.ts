@@ -1,4 +1,6 @@
+import "./instrument";
 import express from "express";
+import * as Sentry from "@sentry/node";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { config } from "./config/environment";
@@ -20,6 +22,7 @@ const requiredEnvVars = [
   "STRAVA_CLIENT_SECRET",
   "JWT_SECRET",
   "ENCRYPTION_KEY",
+  "SENTRY_DSN",
 ];
 
 requiredEnvVars.forEach((varName) => {
@@ -74,10 +77,20 @@ app.use(`${API_PREFIX}/activities`, activitiesRouter);
 app.use(`${API_PREFIX}/admin`, adminRouter);
 
 /**
- * Global error handler
- * Must be registered last to catch all errors
+ * Sentry error handler - MUST be before custom error handlers
+ */
+Sentry.setupExpressErrorHandler(app);
+
+/**
+ * Custom error handler - comes AFTER Sentry's handler
  */
 app.use(errorHandler);
+
+app.get("/debug-sentry", (req, res) => {
+  throw new Error(
+    "Test Sentry error - if you see this in Sentry, it's working!",
+  );
+});
 
 const port = config.PORT;
 
@@ -87,6 +100,7 @@ const server = app.listen(port, async () => {
     environment: config.NODE_ENV,
     nodeVersion: process.version,
     pid: process.pid,
+    sentryEnabled: !!process.env.SENTRY_DSN,
   });
 
   // Initialize webhooks in production
@@ -98,6 +112,11 @@ const server = app.listen(port, async () => {
       await ensureWebhooksInitialized();
     } catch (error) {
       logger.error("Failed to initialize webhooks", error);
+      Sentry.captureException(error, {
+        tags: {
+          component: "webhook-initialization",
+        },
+      });
     }
   }
 
@@ -107,6 +126,9 @@ const server = app.listen(port, async () => {
     webhook: `http://localhost:${port}${API_PREFIX}/strava/webhook`,
     oauth: `http://localhost:${port}${API_PREFIX}/auth/strava`,
     admin: `http://localhost:${port}${API_PREFIX}/admin/*`,
+    ...(config.isDevelopment && {
+      debugSentry: `http://localhost:${port}/debug-sentry`,
+    }),
   });
 
   if (config.isDevelopment) {
@@ -119,10 +141,11 @@ const server = app.listen(port, async () => {
 
 /**
  * Graceful shutdown handler
- * Ensures connections are closed properly and resources are cleaned up
  */
 const gracefulShutdown = async (signal: NodeJS.Signals): Promise<void> => {
   logger.info("Shutdown signal received", { signal });
+
+  await Sentry.close(2000);
 
   // Stop accepting new connections
   server.close(async (err) => {
@@ -169,11 +192,22 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 // Handle uncaught errors
 process.on("unhandledRejection", (reason, promise) => {
   logger.error("Unhandled promise rejection", { reason, promise });
+  Sentry.captureException(reason, {
+    tags: {
+      type: "unhandledRejection",
+    },
+    extra: {
+      promise: String(promise),
+    },
+  });
 });
 
 process.on("uncaughtException", (error) => {
   logger.error("Uncaught exception", error);
+  Sentry.captureException(error, {
+    tags: {
+      type: "uncaughtException",
+    },
+  });
   gracefulShutdown("SIGTERM");
 });
-
-export default app;
