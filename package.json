@@ -21,7 +21,8 @@
     "studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write \"src/**/*.{ts,tsx,json}\" \"prisma/**/*.prisma\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,json}\" \"prisma/**/*.prisma\"",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@prisma/client": "^6.8.2",
