@@ -7,8 +7,8 @@ import {
   vi,
   MockedFunction,
 } from "vitest";
-import type { WeatherData } from "../../../src/services/weatherService";
-import type { StravaActivity } from "../../../src/services/stravaApi";
+import type { WeatherData } from "../weatherService";
+import type { StravaActivity } from "../stravaApi";
 
 vi.mock("../../../src/lib", () => ({
   prisma: {
@@ -74,10 +74,10 @@ vi.mock("../../../src/utils/logger", () => ({
   logDebug: vi.fn(),
 }));
 
-import { ActivityProcessor } from "../../../src/services/activityProcessor";
-import { weatherService } from "../../../src/services/weatherService";
-import { stravaApiService } from "../../../src/services/stravaApi";
-import { prisma } from "../../../src/lib";
+import { ActivityProcessor } from "../activityProcessor";
+import { weatherService } from "../weatherService";
+import { stravaApiService } from "../stravaApi";
+import { prisma } from "../../lib";
 
 describe("ActivityProcessor Service", () => {
   let activityProcessor: ActivityProcessor;
