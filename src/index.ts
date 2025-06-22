@@ -15,6 +15,7 @@ import { authRouter } from "./routes/auth";
 import { usersRouter } from "./routes/users";
 import { activitiesRouter } from "./routes/activities";
 import { adminRouter } from "./routes/admin";
+import { sentryRouter } from "./routes/sentry";
 
 const requiredEnvVars = [
   "DATABASE_URL",
@@ -38,6 +39,16 @@ requiredEnvVars.forEach((varName) => {
  */
 const app = express();
 
+// Trust proxy configuration for Coolify/Traefik
+// This ensures req.ip contains the real client IP, not Traefik's IP
+app.set("trust proxy", true);
+
+// Alternative: Be more specific about which proxies to trust
+// app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']);
+
+// If you use Cloudflare in front of Coolify, also add:
+// app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal', '172.16.0.0/12']);
+
 /**
  * CORS configuration
  */
@@ -53,6 +64,8 @@ const corsOptions: cors.CorsOptions = {
   credentials: true,
   maxAge: 86400, // 24 hours
 };
+
+app.use("/api/sentry", sentryRouter);
 
 /**
  * Global middleware stack

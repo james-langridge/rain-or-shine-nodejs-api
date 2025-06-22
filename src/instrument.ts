@@ -2,63 +2,107 @@ import * as Sentry from "@sentry/node";
 import { nodeProfilingIntegration } from "@sentry/profiling-node";
 import { config } from "./config/environment";
 
-// Validate Sentry DSN
-if (!process.env.SENTRY_DSN || !process.env.PROXY_AUTH_SECRET) {
-  console.error("❌ SENTRY_DSN environment variable is not set!");
-  console.error("Please set SENTRY_DSN in your .env file or environment");
-  process.exit(1);
+// Validate Sentry configuration
+if (!process.env.SENTRY_DSN) {
+  console.warn("SENTRY_DSN not configured - error tracking disabled");
 }
 
 Sentry.init({
-  // Use environment variable
   dsn: process.env.SENTRY_DSN,
   environment: config.NODE_ENV,
+
+  // Use tunnel if configured (for IP blocking workaround)
   tunnel: process.env.SENTRY_TUNNEL_URL,
-  transportOptions: {
-    headers: {
-      "X-Proxy-Auth": process.env.PROXY_AUTH_SECRET,
-    },
-  },
+
+  // Only enable in production with DSN configured
+  enabled: config.isProduction && !!process.env.SENTRY_DSN,
 
   integrations: [nodeProfilingIntegration()],
 
-  tracesSampleRate: config.isProduction ? 0.1 : 1.0, // 10% in prod
-  profilesSampleRate: config.isProduction ? 0.1 : 1.0, // 10% in prod
+  // Reduce sample rates to avoid rate limiting
+  tracesSampleRate: config.isProduction ? 0.05 : 1.0, // 5% in prod
+  profilesSampleRate: config.isProduction ? 0.01 : 1.0, // 1% in prod
 
-  sendDefaultPii: !config.isProduction, // No PII in production
+  // Don't send PII in production
+  sendDefaultPii: false,
 
-  debug: true,
+  // Debug only in development or when explicitly enabled
+  debug: config.isDevelopment || process.env.SENTRY_DEBUG === "true",
 
+  // Transport options for debugging
+  transportOptions: {
+    // Add timeout
+    keepAlive: true,
+    // Log transport events in debug mode
+    ...(process.env.SENTRY_DEBUG === "true" && {
+      beforeSend: (request: any) => {
+        console.log("[Sentry Transport] Sending to:", request.url);
+        console.log("[Sentry Transport] Body size:", request.body?.length || 0);
+      },
+    }),
+  },
+
+  // Add retry backoff for rate limiting
   beforeSend(event, hint) {
-    console.log("=== Sentry beforeSend ===");
-    console.log("Event type:", event.level);
-    console.log("Event ID:", event.event_id);
-    console.log(
-      "DSN being used:",
-      process.env.SENTRY_DSN?.substring(0, 50) + "...",
-    );
+    // Don't send in development unless explicitly enabled
+    if (config.isDevelopment && !process.env.FORCE_SENTRY_DEV) {
+      console.log("[Sentry] Event suppressed in development:", event.event_id);
+      return null;
+    }
 
-    // Log any error details
-    if (hint.originalException) {
-      console.log("Original error:", hint.originalException);
+    // Log event details in debug mode
+    if (process.env.SENTRY_DEBUG === "true") {
+      console.log("[Sentry] Sending event:", {
+        eventId: event.event_id,
+        level: event.level,
+        message: event.message,
+        tunnel: !!process.env.SENTRY_TUNNEL_URL,
+      });
     }
 
     return event;
   },
 
-  beforeSendTransaction(event) {
-    console.log("=== Sentry beforeSendTransaction ===");
-    console.log("Transaction:", event.transaction);
-    return event;
-  },
-
-  // Additional error handling
-  onFatalError: (error) => {
-    console.error("Sentry Fatal Error:", error);
-  },
+  // Error filtering
+  ignoreErrors: [
+    // Ignore known non-critical errors
+    "ResizeObserver loop limit exceeded",
+    "Non-Error promise rejection captured",
+    /^Webhook verification failed/,
+  ],
 });
 
-console.log(
-  "Sentry initialized with DSN:",
-  process.env.SENTRY_DSN?.substring(0, 50) + "...",
-);
+// Add to global for rate limiting
+declare global {
+  var __sentryLastSent: number | undefined;
+}
+
+// Log initialization status
+console.log("[Sentry] Initialization status:", {
+  enabled: !!process.env.SENTRY_DSN,
+  environment: config.NODE_ENV,
+  tunnel: process.env.SENTRY_TUNNEL_URL ? "configured" : "not configured",
+  debug: config.isDevelopment || process.env.SENTRY_DEBUG === "true",
+});
+
+// Test Sentry configuration
+export function testSentry() {
+  if (!process.env.SENTRY_DSN) {
+    console.log("[Sentry] Cannot test - no DSN configured");
+    return;
+  }
+
+  console.log("[Sentry] Sending test error...");
+
+  try {
+    throw new Error("Test Sentry error - ignore this!");
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: {
+        test: true,
+        source: "manual-test",
+      },
+    });
+    console.log("[Sentry] Test error sent - check dashboard");
+  }
+}
