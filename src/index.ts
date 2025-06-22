@@ -87,6 +87,15 @@ Sentry.setupExpressErrorHandler(app);
 app.use(errorHandler);
 
 app.get("/debug-sentry", (req, res) => {
+  console.log("Debug Sentry route hit");
+  console.log("Sentry enabled:", !!process.env.SENTRY_DSN);
+  console.log(
+    "Sentry DSN starts with:",
+    process.env.SENTRY_DSN?.substring(0, 20),
+  );
+
+  Sentry.captureMessage("Test message from debug-sentry route", "info");
+
   throw new Error(
     "Test Sentry error - if you see this in Sentry, it's working!",
   );
