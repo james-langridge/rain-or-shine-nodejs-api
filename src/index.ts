@@ -3,6 +3,9 @@ import express from "express";
 import * as Sentry from "@sentry/node";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import session from "express-session";
+import passport from "./config/passport";
+import { sessionConfig } from "./config/session";
 import { config } from "./config/environment";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
@@ -21,8 +24,7 @@ const requiredEnvVars = [
   "DATABASE_URL",
   "STRAVA_CLIENT_ID",
   "STRAVA_CLIENT_SECRET",
-  "JWT_SECRET",
-  "ENCRYPTION_KEY",
+  "SESSION_SECRET",
   "SENTRY_DSN",
 ];
 
@@ -35,19 +37,11 @@ requiredEnvVars.forEach((varName) => {
 
 /**
  * Express application factory
- * Creates and configures the Express application with all middleware and routes
  */
 const app = express();
 
 // Trust proxy configuration for Coolify/Traefik
-// This ensures req.ip contains the real client IP, not Traefik's IP
 app.set("trust proxy", true);
-
-// Alternative: Be more specific about which proxies to trust
-// app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']);
-
-// If you use Cloudflare in front of Coolify, also add:
-// app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal', '172.16.0.0/12']);
 
 /**
  * CORS configuration
@@ -69,17 +63,20 @@ app.use("/api/sentry", sentryRouter);
 
 /**
  * Global middleware stack
- * Order is important: parsing → logging → routes → error handling
+ * Order is important: parsing → session → passport → logging → routes → error handling
  */
 app.use(cors(corsOptions));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
+app.use(session(sessionConfig));
+app.use(passport.initialize());
+app.use(passport.session());
+
 app.use(requestLogger);
 
 /**
  * API route configuration
- * All routes are prefixed with /api for clear separation from static assets
  */
 const API_PREFIX = "/api";
 app.use(`${API_PREFIX}/health`, healthRouter);
@@ -90,25 +87,18 @@ app.use(`${API_PREFIX}/activities`, activitiesRouter);
 app.use(`${API_PREFIX}/admin`, adminRouter);
 
 /**
- * Sentry error handler - MUST be before custom error handlers
+ * Sentry error handler
  */
 Sentry.setupExpressErrorHandler(app);
 
 /**
- * Custom error handler - comes AFTER Sentry's handler
+ * Custom error handler
  */
 app.use(errorHandler);
 
 app.get("/debug-sentry", (req, res) => {
   console.log("Debug Sentry route hit");
-  console.log("Sentry enabled:", !!process.env.SENTRY_DSN);
-  console.log(
-    "Sentry DSN starts with:",
-    process.env.SENTRY_DSN?.substring(0, 20),
-  );
-
   Sentry.captureMessage("Test message from debug-sentry route", "info");
-
   throw new Error(
     "Test Sentry error - if you see this in Sentry, it's working!",
   );
@@ -123,6 +113,7 @@ const server = app.listen(port, async () => {
     nodeVersion: process.version,
     pid: process.pid,
     sentryEnabled: !!process.env.SENTRY_DSN,
+    authMethod: "session",
   });
 
   // Initialize webhooks in production
@@ -142,7 +133,6 @@ const server = app.listen(port, async () => {
     }
   }
 
-  // Log available endpoints for development convenience
   logger.info("API endpoints available", {
     health: `http://localhost:${port}${API_PREFIX}/health`,
     webhook: `http://localhost:${port}${API_PREFIX}/strava/webhook`,
@@ -152,13 +142,6 @@ const server = app.listen(port, async () => {
       debugSentry: `http://localhost:${port}/debug-sentry`,
     }),
   });
-
-  if (config.isDevelopment) {
-    logger.info("Development mode active", {
-      frontendUrl: config.APP_URL,
-      apiProxy: `${config.APP_URL}/api/* → http://localhost:${port}/api/*`,
-    });
-  }
 });
 
 /**
@@ -169,7 +152,6 @@ const gracefulShutdown = async (signal: NodeJS.Signals): Promise<void> => {
 
   await Sentry.close(2000);
 
-  // Stop accepting new connections
   server.close(async (err) => {
     if (err) {
       logger.error("Error during server shutdown", err);
@@ -179,7 +161,7 @@ const gracefulShutdown = async (signal: NodeJS.Signals): Promise<void> => {
     logger.info("HTTP server closed");
 
     try {
-      // Perform cleanup tasks
+      // Cleanup tasks
       if (config.isDevelopment) {
         const { cleanupWebhookOnShutdown } = await import(
           "./services/startupWebhookSetup"
@@ -204,7 +186,7 @@ const gracefulShutdown = async (signal: NodeJS.Signals): Promise<void> => {
   setTimeout(() => {
     logger.error("Forced shutdown due to timeout");
     process.exit(1);
-  }, 10000); // 10 second timeout
+  }, 10000);
 };
 
 // Register shutdown handlers
@@ -214,22 +196,11 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 // Handle uncaught errors
 process.on("unhandledRejection", (reason, promise) => {
   logger.error("Unhandled promise rejection", { reason, promise });
-  Sentry.captureException(reason, {
-    tags: {
-      type: "unhandledRejection",
-    },
-    extra: {
-      promise: String(promise),
-    },
-  });
+  Sentry.captureException(reason);
 });
 
 process.on("uncaughtException", (error) => {
   logger.error("Uncaught exception", error);
-  Sentry.captureException(error, {
-    tags: {
-      type: "uncaughtException",
-    },
-  });
+  Sentry.captureException(error);
   gracefulShutdown("SIGTERM");
 });

@@ -8,7 +8,7 @@ beforeAll(() => {
   // Mock sensitive environment variables
   vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
   vi.stubEnv(
-    "JWT_SECRET",
+    "SESSION_SECRET",
     "test-jwt-secret-that-is-at-least-32-characters-long",
   );
   vi.stubEnv("ENCRYPTION_KEY", "test-encryption-key-that-is-at-least-32-chars");
