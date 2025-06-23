@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib";
-import { authenticateUser, clearAuthCookie } from "../services/auth";
+import { authenticateUser } from "../middleware/auth";
 import { AppError, asyncHandler } from "../middleware/errorHandler";
 import { logger } from "../utils/logger";
 import type { Request, Response } from "express";
@@ -334,9 +334,6 @@ usersRouter.delete(
         userId: user.id,
         requestId,
       });
-
-      // Clear the auth cookie since the account no longer exists
-      clearAuthCookie(res);
 
       res.json({
         success: true,

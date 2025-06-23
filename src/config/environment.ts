@@ -46,8 +46,7 @@ const environmentSchema = z.object({
   OPENWEATHERMAP_API_KEY: z.string().min(1),
 
   // Security tokens
-  JWT_SECRET: z.string().min(32),
-  ENCRYPTION_KEY: z.string().min(32),
+  SESSION_SECRET: z.string().min(32),
 
   // Logging configuration
   LOG_LEVEL: z
