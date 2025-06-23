@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { activityProcessor } from "../services/activityProcessor";
-import { authenticateUser } from "../services/auth";
+import { authenticateUser } from "../middleware/auth";
 import { AppError, asyncHandler } from "../middleware/errorHandler";
 import { logger } from "../utils/logger";
 

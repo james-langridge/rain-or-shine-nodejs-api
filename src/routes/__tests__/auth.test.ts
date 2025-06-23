@@ -75,7 +75,7 @@ vi.mock("../../config/environment", () => ({
     auth: {
       sessionCookieName: "strava-weather-session",
     },
-    JWT_SECRET: "test-jwt-secret",
+    SESSION_SECRET: "test-jwt-secret",
   },
 }));
 
