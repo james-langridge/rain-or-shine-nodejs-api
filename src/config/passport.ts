@@ -81,12 +81,12 @@ passport.use(
 
       if (error) {
         logger.warn("OAuth authorization denied", { error });
-        return done(null, false, { message: "Authorization denied" });
+        return done(null, false);
       }
 
       if (!code || typeof code !== "string") {
         logger.warn("OAuth callback missing code");
-        return done(null, false, { message: "Missing authorization code" });
+        return done(null, false);
       }
 
       logger.info("Exchanging authorization code for tokens");
@@ -95,7 +95,7 @@ passport.use(
 
       if (!athlete) {
         logger.error("Token response missing athlete data");
-        return done(null, false, { message: "Invalid token response" });
+        return done(null, false);
       }
 
       const user = await prisma.user.upsert({

@@ -33,7 +33,8 @@ export const sessionConfig: session.SessionOptions = {
 
 declare module "express-session" {
   interface SessionData {
-    userId: string;
-    stravaAthleteId: string;
+    userId?: string;
+    stravaAthleteId?: string;
+    oauthState?: string;
   }
 }

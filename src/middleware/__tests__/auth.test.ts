@@ -1,7 +1,38 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Request, Response, NextFunction } from "express";
-import { authenticateUser } from "../auth";
-import { prisma } from "../../lib";
+
+// Mock environment config to prevent validation errors in CI
+vi.mock("../../config/environment", () => ({
+  config: {
+    STRAVA_CLIENT_ID: "test-client-id",
+    STRAVA_CLIENT_SECRET: "test-client-secret",
+    SESSION_SECRET: "test-session-secret",
+    DATABASE_URL: "postgresql://test",
+    OPENWEATHERMAP_API_KEY: "test-weather-key",
+    STRAVA_WEBHOOK_VERIFY_TOKEN: "test-webhook-token",
+    APP_URL: "http://localhost:3000",
+    LOG_LEVEL: "info",
+    isProduction: false,
+    isDevelopment: true,
+    isTest: true,
+  },
+}));
+
+// Mock logger to prevent imports that trigger environment validation
+vi.mock("../../utils/logger", () => ({
+  logger: {
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    child: vi.fn(() => ({
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    })),
+  },
+}));
 
 vi.mock("../../lib", () => ({
   prisma: {
@@ -10,6 +41,9 @@ vi.mock("../../lib", () => ({
     },
   },
 }));
+
+import { authenticateUser } from "../auth";
+import { prisma } from "../../lib";
 
 describe("Session Auth Middleware", () => {
   let req: Partial<Request>;
@@ -39,8 +73,8 @@ describe("Session Auth Middleware", () => {
     const mockUser = {
       id: "user-123",
       stravaAthleteId: "456789",
-      accessToken: "plain-token", // No encryption!
-      refreshToken: "plain-refresh", // No encryption!
+      accessToken: "plain-token",
+      refreshToken: "plain-refresh",
       weatherEnabled: true,
       firstName: "John",
       lastName: "Doe",

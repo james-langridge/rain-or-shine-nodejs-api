@@ -76,18 +76,18 @@ authRouter.post("/logout", (req: Request, res: Response) => {
   req.logout((err) => {
     if (err) {
       logger.error("Logout error", err);
-      return res.status(500).json({
+      res.status(500).json({
         success: false,
         error: "Logout failed",
       });
+      return;
     }
 
-    req.session.destroy((err) => {
-      if (err) {
-        logger.error("Session destruction error", err);
+    req.session.destroy((sessionErr) => {
+      if (sessionErr) {
+        logger.error("Session destruction error", sessionErr);
       }
 
-      // Clear the session cookie
       res.clearCookie("strava-weather-session");
 
       logger.info("User logged out", {
@@ -101,6 +101,7 @@ authRouter.post("/logout", (req: Request, res: Response) => {
       });
     });
   });
+  return;
 });
 
 /**
@@ -119,7 +120,7 @@ authRouter.get(
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         authenticated: true,
@@ -170,7 +171,6 @@ authRouter.delete(
       logger.warn("Failed to revoke Strava token", { userId, error });
     }
 
-    // Delete user data
     await prisma.user.delete({
       where: { id: userId },
     });
@@ -180,12 +180,13 @@ authRouter.delete(
       req.session.destroy(() => {
         res.clearCookie("strava-weather-session");
 
-        res.json({
+        return res.json({
           success: true,
           message: "Account deleted successfully",
         });
       });
     });
+    return;
   }),
 );
 
