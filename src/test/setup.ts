@@ -11,7 +11,6 @@ beforeAll(() => {
     "SESSION_SECRET",
     "test-jwt-secret-that-is-at-least-32-characters-long",
   );
-  vi.stubEnv("ENCRYPTION_KEY", "test-encryption-key-that-is-at-least-32-chars");
   vi.stubEnv("STRAVA_CLIENT_ID", "test-client-id");
   vi.stubEnv("STRAVA_CLIENT_SECRET", "test-client-secret");
   vi.stubEnv("STRAVA_WEBHOOK_VERIFY_TOKEN", "test-webhook-token");
@@ -53,8 +52,8 @@ export const factories = {
   user: (overrides = {}) => ({
     id: "test-user-id",
     stravaAthleteId: "12345",
-    accessToken: "encrypted-token",
-    refreshToken: "encrypted-refresh",
+    accessToken: "test-access-token",
+    refreshToken: "test-refresh-token",
     tokenExpiresAt: new Date(Date.now() + 3600000),
     weatherEnabled: true,
     firstName: "Test",

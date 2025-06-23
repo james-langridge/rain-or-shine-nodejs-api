@@ -47,7 +47,6 @@ const environmentSchema = z.object({
 
   // Security tokens
   SESSION_SECRET: z.string().min(32),
-  ENCRYPTION_KEY: z.string().min(32),
 
   // Logging configuration
   LOG_LEVEL: z

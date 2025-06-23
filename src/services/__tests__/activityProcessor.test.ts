@@ -39,16 +39,6 @@ vi.mock("../../../src/services/stravaApi", () => ({
   },
 }));
 
-vi.mock("../../../src/services/encryption", () => ({
-  encryptionService: {
-    encrypt: vi.fn((value: string) => `encrypted-${value}`),
-    decrypt: vi.fn((value: string) => value.replace("encrypted-", "")),
-    isEncrypted: vi.fn((value: string) => value.startsWith("encrypted-")),
-    safeEncrypt: vi.fn((value: string) => value),
-    safeDecrypt: vi.fn((value: string) => value),
-  },
-}));
-
 vi.mock("../../../src/utils/logger", () => ({
   logger: {
     info: vi.fn(),
@@ -85,8 +75,8 @@ describe("ActivityProcessor Service", () => {
   // Test data fixtures
   const mockUser = {
     id: "user-123",
-    accessToken: "encrypted-access-token",
-    refreshToken: "encrypted-refresh-token",
+    accessToken: "mock-access-token",
+    refreshToken: "mock-refresh-token",
     tokenExpiresAt: new Date(Date.now() + 3600000), // 1 hour from now
     weatherEnabled: true,
     firstName: "John",
@@ -133,8 +123,8 @@ describe("ActivityProcessor Service", () => {
   };
 
   const mockTokenData = {
-    accessToken: "new-encrypted-token",
-    refreshToken: "new-encrypted-refresh",
+    accessToken: "new-access-token",
+    refreshToken: "new-refresh-token",
     expiresAt: new Date(Date.now() + 7200000),
     wasRefreshed: false,
   };
@@ -217,8 +207,8 @@ describe("ActivityProcessor Service", () => {
         const expiredTokenData = {
           ...mockTokenData,
           wasRefreshed: true,
-          accessToken: "refreshed-encrypted-token",
-          refreshToken: "refreshed-encrypted-refresh",
+          accessToken: "refreshed-access-token",
+          refreshToken: "refreshed-refresh-token",
         };
 
         (
