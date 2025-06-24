@@ -20,6 +20,7 @@ vi.mock("../../lib", () => ({
   prisma: {
     user: {
       findUnique: vi.fn(),
+      delete: vi.fn(),
     },
   },
 }));
@@ -247,11 +248,106 @@ describe("Strava Webhook Router", () => {
       });
     });
 
+    describe("athlete deauthorization", () => {
+      const deauthorizeEvent = {
+        object_type: "athlete",
+        object_id: 12345,
+        aspect_type: "deauthorize",
+        owner_id: 12345,
+        subscription_id: 98765,
+        event_time: 1705311000,
+      };
+
+      it("should handle athlete deauthorization successfully", async () => {
+        const deletedUser = {
+          id: "user-123",
+          firstName: "John",
+          lastName: "Doe",
+          stravaAthleteId: "12345",
+        };
+
+        (prisma.user.delete as MockedFunction<any>).mockResolvedValue(
+          deletedUser,
+        );
+
+        const response = await request(app)
+          .post("/api/strava/webhook")
+          .send(deauthorizeEvent);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({
+          message: "Deauthorization processed",
+          userId: "user-123",
+        });
+
+        expect(prisma.user.delete).toHaveBeenCalledWith({
+          where: { stravaAthleteId: "12345" },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            stravaAthleteId: true,
+          },
+        });
+
+        expect(activityProcessor.processActivity).not.toHaveBeenCalled();
+      });
+
+      it("should handle deauthorization for non-existent user", async () => {
+        const notFoundError = new Error("Record to delete does not exist");
+        (prisma.user.delete as MockedFunction<any>).mockRejectedValue(
+          notFoundError,
+        );
+
+        const response = await request(app)
+          .post("/api/strava/webhook")
+          .send(deauthorizeEvent);
+
+        expect(response.status).toBe(200);
+        expect(response.body.message).toBe("Deauthorization acknowledged");
+
+        expect(prisma.user.delete).toHaveBeenCalledWith({
+          where: { stravaAthleteId: "12345" },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            stravaAthleteId: true,
+          },
+        });
+      });
+
+      it("should handle unexpected errors during deauthorization", async () => {
+        const unexpectedError = new Error("Database connection failed");
+        (prisma.user.delete as MockedFunction<any>).mockRejectedValue(
+          unexpectedError,
+        );
+
+        const response = await request(app)
+          .post("/api/strava/webhook")
+          .send(deauthorizeEvent);
+
+        expect(response.status).toBe(200);
+        expect(response.body.message).toBe("Deauthorization acknowledged");
+
+        expect(prisma.user.delete).toHaveBeenCalledWith({
+          where: { stravaAthleteId: "12345" },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            stravaAthleteId: true,
+          },
+        });
+      });
+    });
+
     describe("edge cases and filtering", () => {
-      it("should ignore non-activity events", async () => {
+      it("should ignore non-activity-create events", async () => {
         const athleteEvent = {
           ...validWebhookEvent,
           object_type: "athlete",
+          aspect_type: "update", // Not deauthorize, so should be ignored
         };
 
         const response = await request(app)
@@ -261,9 +357,10 @@ describe("Strava Webhook Router", () => {
         expect(response.status).toBe(200);
         expect(response.body.message).toBe("Event acknowledged");
         expect(activityProcessor.processActivity).not.toHaveBeenCalled();
+        expect(prisma.user.delete).not.toHaveBeenCalled();
       });
 
-      it("should ignore non-create events", async () => {
+      it("should ignore activity non-create events", async () => {
         const updateEvent = {
           ...validWebhookEvent,
           aspect_type: "update",
@@ -276,6 +373,7 @@ describe("Strava Webhook Router", () => {
         expect(response.status).toBe(200);
         expect(response.body.message).toBe("Event acknowledged");
         expect(activityProcessor.processActivity).not.toHaveBeenCalled();
+        expect(prisma.user.delete).not.toHaveBeenCalled();
       });
 
       it("should handle unknown user gracefully", async () => {

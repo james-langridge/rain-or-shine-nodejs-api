@@ -24,7 +24,7 @@ const stravaRouter = Router();
 const stravaWebhookEventSchema = z.object({
   object_type: z.enum(["activity", "athlete"]),
   object_id: z.number(),
-  aspect_type: z.enum(["create", "update", "delete"]),
+  aspect_type: z.enum(["create", "update", "delete", "deauthorize"]),
   updates: z.record(z.any()).optional(),
   owner_id: z.number(),
   subscription_id: z.number(),
@@ -85,6 +85,7 @@ stravaRouter.get("/webhook", (req: Request, res: Response): void => {
  *
  * Processes incoming Strava webhook events. Currently handles:
  * - New activity creation (activity.create)
+ * - Athlete deauthorization (athlete.deauthorize) - deletes all user data
  *
  * Implements retry logic to handle race conditions where activities
  * may not be immediately available after creation notification.
@@ -121,6 +122,67 @@ stravaRouter.post(
         eventTime: new Date(event.event_time * 1000).toISOString(),
         requestId,
       });
+
+      // Handle athlete deauthorization
+      if (
+        event.object_type === "athlete" &&
+        event.aspect_type === "deauthorize"
+      ) {
+        const stravaAthleteId = event.owner_id.toString();
+
+        logger.info("Processing athlete deauthorization", {
+          stravaAthleteId,
+          objectId: event.object_id,
+          requestId,
+        });
+
+        try {
+          // Find and delete user by stravaAthleteId
+          const deletedUser = await prisma.user.delete({
+            where: { stravaAthleteId },
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              stravaAthleteId: true,
+            },
+          });
+
+          logger.info("User data deleted following deauthorization", {
+            userId: deletedUser.id,
+            userName: `${deletedUser.firstName} ${deletedUser.lastName}`,
+            stravaAthleteId: deletedUser.stravaAthleteId,
+            requestId,
+          });
+
+          res.status(200).json({
+            message: "Deauthorization processed",
+            userId: deletedUser.id,
+          });
+          return;
+        } catch (error) {
+          // User not found is not an error - they may have already been deleted
+          if (
+            error instanceof Error &&
+            error.message.includes("Record to delete does not exist")
+          ) {
+            logger.info("Deauthorization for non-existent user", {
+              stravaAthleteId,
+              requestId,
+            });
+          } else {
+            logger.warn("Error during user deauthorization", {
+              stravaAthleteId,
+              error: error instanceof Error ? error.message : "Unknown error",
+              requestId,
+            });
+          }
+
+          // Always return 200 to prevent Strava retries
+          res.status(200).json({ message: "Deauthorization acknowledged" });
+          return;
+        }
+      }
 
       // Only process new activity creations
       if (event.object_type !== "activity" || event.aspect_type !== "create") {
