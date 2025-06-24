@@ -9,6 +9,12 @@ import { sessionConfig } from "./config/session";
 import { config } from "./config/environment";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
+import {
+  standardRateLimit,
+  strictRateLimit,
+  webhookRateLimit,
+  healthCheckRateLimit,
+} from "./middleware/rateLimiter";
 import { logger } from "./utils/logger";
 
 // Route imports
@@ -76,15 +82,25 @@ app.use(passport.session());
 app.use(requestLogger);
 
 /**
- * API route configuration
+ * Rate limiting configuration
+ * Applied before routes but after authentication middleware
  */
 const API_PREFIX = "/api";
-app.use(`${API_PREFIX}/health`, healthRouter);
-app.use(`${API_PREFIX}/strava`, stravaRouter);
-app.use(`${API_PREFIX}/auth`, authRouter);
-app.use(`${API_PREFIX}/users`, usersRouter);
-app.use(`${API_PREFIX}/activities`, activitiesRouter);
-app.use(`${API_PREFIX}/admin`, adminRouter);
+
+// Health endpoints - no rate limiting but with logging
+app.use(`${API_PREFIX}/health`, healthCheckRateLimit, healthRouter);
+
+// Webhook endpoint - high rate limit for Strava bursts
+app.use(`${API_PREFIX}/strava/webhook`, webhookRateLimit);
+
+// Auth endpoints - strict rate limiting
+app.use(`${API_PREFIX}/auth`, strictRateLimit, authRouter);
+
+// All other API endpoints - standard rate limiting
+app.use(`${API_PREFIX}/strava`, standardRateLimit, stravaRouter);
+app.use(`${API_PREFIX}/users`, standardRateLimit, usersRouter);
+app.use(`${API_PREFIX}/activities`, standardRateLimit, activitiesRouter);
+app.use(`${API_PREFIX}/admin`, standardRateLimit, adminRouter);
 
 /**
  * Sentry error handler
