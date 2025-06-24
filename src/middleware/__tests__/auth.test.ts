@@ -32,18 +32,22 @@ vi.mock("../../utils/logger", () => ({
       error: vi.fn(),
     })),
   },
+  createServiceLogger: vi.fn(() => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  })),
 }));
 
 vi.mock("../../lib", () => ({
-  prisma: {
-    user: {
-      findUnique: vi.fn(),
-    },
+  userRepository: {
+    findById: vi.fn(),
   },
 }));
 
 import { authenticateUser } from "../auth";
-import { prisma } from "../../lib";
+import { userRepository } from "../../lib";
 
 describe("Session Auth Middleware", () => {
   let req: Partial<Request>;
@@ -80,7 +84,7 @@ describe("Session Auth Middleware", () => {
       lastName: "Doe",
     };
 
-    (prisma.user.findUnique as any).mockResolvedValue(mockUser);
+    (userRepository.findById as any).mockResolvedValue(mockUser);
 
     // Act
     await authenticateUser(req as Request, res as Response, next);

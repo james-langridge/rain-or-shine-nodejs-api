@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { webhookSubscriptionService } from "../services/webhookSubscription";
 import { AppError } from "../middleware/errorHandler";
 import { config } from "../config/environment";
-import { prisma } from "../lib";
+import { userRepository } from "../lib";
 
 const adminRouter = Router();
 
@@ -234,26 +234,17 @@ adminRouter.get(
       const subscription = await webhookSubscriptionService.viewSubscription();
 
       // Get recent user activities (as a proxy for webhook activity)
-      const recentUsers = await prisma.user.findMany({
-        where: {
-          updatedAt: {
-            gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
-          },
-        },
-        select: {
-          id: true,
-          stravaAthleteId: true,
-          firstName: true,
-          lastName: true,
-          weatherEnabled: true,
-          updatedAt: true,
-          tokenExpiresAt: true,
-        },
-        orderBy: {
-          updatedAt: "desc",
-        },
-        take: 10,
+      const recentUsers = await userRepository.findMany({
+        limit: 10,
+        orderBy: "updatedAt",
+        orderDirection: "desc",
       });
+
+      // Filter users updated in the last 24 hours
+      const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recentlyUpdatedUsers = recentUsers.filter(
+        (user) => new Date(user.updatedAt) >= last24Hours,
+      );
 
       // Check Vercel function logs status
       const functionStatus = {
@@ -273,8 +264,8 @@ adminRouter.get(
             createdAt: subscription?.created_at,
           },
           recentActivity: {
-            usersUpdatedLast24h: recentUsers.length,
-            users: recentUsers.map((u) => ({
+            usersUpdatedLast24h: recentlyUpdatedUsers.length,
+            users: recentlyUpdatedUsers.map((u) => ({
               name: `${u.firstName} ${u.lastName}`,
               stravaId: u.stravaAthleteId,
               weatherEnabled: u.weatherEnabled,

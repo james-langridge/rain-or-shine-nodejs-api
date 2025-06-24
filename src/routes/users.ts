@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { prisma } from "../lib";
+import { userRepository, userPreferenceRepository } from "../lib";
 import { authenticateUser } from "../middleware/auth";
 import { AppError, asyncHandler } from "../middleware/errorHandler";
 import { logger } from "../utils/logger";
@@ -57,32 +57,7 @@ usersRouter.get(
       requestId,
     });
 
-    const userProfile = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: {
-        id: true,
-        stravaAthleteId: true,
-        firstName: true,
-        lastName: true,
-        profileImageUrl: true,
-        city: true,
-        state: true,
-        country: true,
-        weatherEnabled: true,
-        createdAt: true,
-        updatedAt: true,
-        preferences: {
-          select: {
-            temperatureUnit: true,
-            weatherFormat: true,
-            includeUvIndex: true,
-            includeVisibility: true,
-            customFormat: true,
-            updatedAt: true,
-          },
-        },
-      },
-    });
+    const userProfile = await userRepository.findWithPreferences(user.id);
 
     if (!userProfile) {
       logger.error("User profile not found in database", {
@@ -181,15 +156,7 @@ usersRouter.patch(
     });
 
     // Update user
-    const updatedUser = await prisma.user.update({
-      where: { id: user.id },
-      data: updateData,
-      select: {
-        id: true,
-        weatherEnabled: true,
-        updatedAt: true,
-      },
-    });
+    const updatedUser = await userRepository.update(user.id, updateData);
 
     logger.info("User settings updated successfully", {
       userId: user.id,
@@ -263,25 +230,14 @@ usersRouter.patch(
       requestId,
     });
 
-    const updatedPreferences = await prisma.userPreference.upsert({
-      where: { userId: user.id },
-      update: preferencesData,
-      create: {
-        userId: user.id,
-        temperatureUnit: "fahrenheit",
-        weatherFormat: "detailed",
-        includeUvIndex: true,
-        includeVisibility: true,
-        ...preferencesData,
-      },
-      select: {
-        temperatureUnit: true,
-        weatherFormat: true,
-        includeUvIndex: true,
-        includeVisibility: true,
-        customFormat: true,
-        updatedAt: true,
-      },
+    const updatedPreferences = await userPreferenceRepository.upsert({
+      userId: user.id,
+      temperatureUnit: "fahrenheit",
+      weatherFormat: "detailed",
+      includeUvIndex: true,
+      includeVisibility: true,
+      customFormat: null,
+      ...preferencesData,
     });
 
     logger.info("Weather preferences updated successfully", {
@@ -326,9 +282,7 @@ usersRouter.delete(
 
     try {
       // Delete user and all related data (cascading delete)
-      await prisma.user.delete({
-        where: { id: user.id },
-      });
+      await userRepository.delete(user.id);
 
       logger.info("User account deleted successfully", {
         userId: user.id,

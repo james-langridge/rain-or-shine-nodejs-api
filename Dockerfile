@@ -10,11 +10,8 @@ COPY tsconfig.json ./
 # Install ALL dependencies (including dev)
 RUN npm ci
 
-# Copy prisma schema
-COPY prisma ./prisma/
-
-# Generate Prisma client
-RUN npx prisma generate
+# Copy migrations
+COPY migrations ./migrations/
 
 # Copy source code
 COPY src ./src
@@ -36,11 +33,8 @@ COPY package*.json ./
 # Install only production dependencies
 RUN npm ci --only=production && npm cache clean --force
 
-# Copy prisma schema and migrations
-COPY prisma ./prisma/
-
-# Generate Prisma client for production
-RUN npx prisma generate
+# Copy migrations
+COPY migrations ./migrations/
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
@@ -67,4 +61,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
 ENTRYPOINT ["dumb-init", "--"]
 
 # Run migrations and start the app
-CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]
+CMD ["sh", "-c", "npm run migrate && npm start"]

@@ -10,26 +10,37 @@ import {
 import type { WeatherData } from "../weatherService";
 import type { StravaActivity } from "../stravaApi";
 
-vi.mock("../../../src/lib", () => ({
-  prisma: {
-    user: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-    },
-    $transaction: vi.fn(),
-    $disconnect: vi.fn(),
-    $connect: vi.fn(),
-    $executeRaw: vi.fn(),
+// Mock environment config to prevent validation errors in CI
+vi.mock("../../config/environment", () => ({
+  config: {
+    STRAVA_CLIENT_ID: "test-client-id",
+    STRAVA_CLIENT_SECRET: "test-client-secret",
+    SESSION_SECRET: "test-session-secret",
+    DATABASE_URL: "postgresql://test",
+    OPENWEATHERMAP_API_KEY: "test-weather-key",
+    STRAVA_WEBHOOK_VERIFY_TOKEN: "test-webhook-token",
+    APP_URL: "http://localhost:3000",
+    LOG_LEVEL: "info",
+    isProduction: false,
+    isDevelopment: true,
+    isTest: true,
   },
 }));
 
-vi.mock("../../../src/services/weatherService", () => ({
+vi.mock("../../lib", () => ({
+  userRepository: {
+    findById: vi.fn(),
+    update: vi.fn(),
+  },
+}));
+
+vi.mock("../weatherService", () => ({
   weatherService: {
     getWeatherForActivity: vi.fn(),
   },
 }));
 
-vi.mock("../../../src/services/stravaApi", () => ({
+vi.mock("../stravaApi", () => ({
   stravaApiService: {
     ensureValidToken: vi.fn(),
     getActivity: vi.fn(),
@@ -39,7 +50,7 @@ vi.mock("../../../src/services/stravaApi", () => ({
   },
 }));
 
-vi.mock("../../../src/utils/logger", () => ({
+vi.mock("../../utils/logger", () => ({
   logger: {
     info: vi.fn(),
     debug: vi.fn(),
@@ -67,7 +78,7 @@ vi.mock("../../../src/utils/logger", () => ({
 import { ActivityProcessor } from "../activityProcessor";
 import { weatherService } from "../weatherService";
 import { stravaApiService } from "../stravaApi";
-import { prisma } from "../../lib";
+import { userRepository } from "../../lib";
 
 describe("ActivityProcessor Service", () => {
   let activityProcessor: ActivityProcessor;
@@ -137,8 +148,10 @@ describe("ActivityProcessor Service", () => {
     activityProcessor = new ActivityProcessor();
 
     // Setup default mock implementations
-    (prisma.user.findUnique as MockedFunction<any>).mockResolvedValue(mockUser);
-    (prisma.user.update as MockedFunction<any>).mockResolvedValue(mockUser);
+    (userRepository.findById as MockedFunction<any>).mockResolvedValue(
+      mockUser,
+    );
+    (userRepository.update as MockedFunction<any>).mockResolvedValue(mockUser);
     (
       stravaApiService.ensureValidToken as MockedFunction<any>
     ).mockResolvedValue(mockTokenData);
@@ -172,17 +185,7 @@ describe("ActivityProcessor Service", () => {
         });
 
         // Verify service calls
-        expect(prisma.user.findUnique).toHaveBeenCalledWith({
-          where: { id: "user-123" },
-          select: {
-            accessToken: true,
-            refreshToken: true,
-            tokenExpiresAt: true,
-            weatherEnabled: true,
-            firstName: true,
-            lastName: true,
-          },
-        });
+        expect(userRepository.findById).toHaveBeenCalledWith("user-123");
 
         expect(stravaApiService.getActivity).toHaveBeenCalledWith(
           "123456",
@@ -217,14 +220,10 @@ describe("ActivityProcessor Service", () => {
 
         await activityProcessor.processActivity("123456", "user-123");
 
-        expect(prisma.user.update).toHaveBeenCalledWith({
-          where: { id: "user-123" },
-          data: {
-            accessToken: expiredTokenData.accessToken,
-            refreshToken: expiredTokenData.refreshToken,
-            tokenExpiresAt: expiredTokenData.expiresAt,
-            updatedAt: expect.any(Date),
-          },
+        expect(userRepository.update).toHaveBeenCalledWith("user-123", {
+          accessToken: expiredTokenData.accessToken,
+          refreshToken: expiredTokenData.refreshToken,
+          tokenExpiresAt: expiredTokenData.expiresAt,
         });
       });
 
@@ -257,7 +256,7 @@ describe("ActivityProcessor Service", () => {
     describe("skip scenarios", () => {
       it("should skip when weather updates are disabled", async () => {
         const disabledUser = { ...mockUser, weatherEnabled: false };
-        (prisma.user.findUnique as MockedFunction<any>).mockResolvedValue(
+        (userRepository.findById as MockedFunction<any>).mockResolvedValue(
           disabledUser,
         );
 
@@ -323,7 +322,9 @@ describe("ActivityProcessor Service", () => {
 
     describe("error handling", () => {
       it("should handle user not found", async () => {
-        (prisma.user.findUnique as MockedFunction<any>).mockResolvedValue(null);
+        (userRepository.findById as MockedFunction<any>).mockResolvedValue(
+          null,
+        );
 
         const result = await activityProcessor.processActivity(
           "123456",
@@ -397,7 +398,9 @@ describe("ActivityProcessor Service", () => {
         (
           stravaApiService.ensureValidToken as MockedFunction<any>
         ).mockResolvedValue(refreshedToken);
-        (prisma.user.update as MockedFunction<any>).mockRejectedValue(dbError);
+        (userRepository.update as MockedFunction<any>).mockRejectedValue(
+          dbError,
+        );
 
         const result = await activityProcessor.processActivity(
           "123456",
@@ -616,14 +619,14 @@ describe("ActivityProcessor Service", () => {
   describe("performance considerations", () => {
     it("should not make unnecessary API calls when skipping", async () => {
       const disabledUser = { ...mockUser, weatherEnabled: false };
-      (prisma.user.findUnique as MockedFunction<any>).mockResolvedValue(
+      (userRepository.findById as MockedFunction<any>).mockResolvedValue(
         disabledUser,
       );
 
       await activityProcessor.processActivity("123456", "user-123");
 
       // Should only call user lookup
-      expect(prisma.user.findUnique).toHaveBeenCalledTimes(1);
+      expect(userRepository.findById).toHaveBeenCalledTimes(1);
       expect(stravaApiService.ensureValidToken).not.toHaveBeenCalled();
       expect(stravaApiService.getActivity).not.toHaveBeenCalled();
       expect(weatherService.getWeatherForActivity).not.toHaveBeenCalled();

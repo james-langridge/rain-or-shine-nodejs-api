@@ -1,0 +1,54 @@
+# Git
+.git
+.gitignore
+
+# Node
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage
+.nyc_output
+*.test.ts
+*.spec.ts
+__tests__
+
+# Development
+.env.local
+.env.development
+.env.test
+*.log
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist
+build
+
+# Documentation
+README.md
+docs
+*.md
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# Misc
+.claude
+CLAUDE.md
+.dockerignore
+Dockerfile
+docker-compose*.yml

@@ -1,7 +1,7 @@
 import passport from "passport";
 import { Strategy as CustomStrategy } from "passport-custom";
 import { Request } from "express";
-import { prisma } from "../lib";
+import { userRepository } from "../lib";
 import { config } from "./environment";
 import { logger } from "../utils/logger";
 
@@ -27,16 +27,7 @@ passport.serializeUser((user: PassportUser, done) => {
 
 passport.deserializeUser(async (id: string, done) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        stravaAthleteId: true,
-        firstName: true,
-        lastName: true,
-        weatherEnabled: true,
-      },
-    });
+    const user = await userRepository.findById(id);
 
     if (!user) {
       return done(null, false);
@@ -98,33 +89,18 @@ passport.use(
         return done(null, false);
       }
 
-      const user = await prisma.user.upsert({
-        where: { stravaAthleteId: athlete.id.toString() },
-        update: {
-          accessToken: tokenData.access_token,
-          refreshToken: tokenData.refresh_token,
-          tokenExpiresAt: new Date(tokenData.expires_at * 1000),
-          firstName: athlete.firstname || "",
-          lastName: athlete.lastname || "",
-          profileImageUrl: athlete.profile_medium || athlete.profile,
-          city: athlete.city,
-          state: athlete.state,
-          country: athlete.country,
-          updatedAt: new Date(),
-        },
-        create: {
-          stravaAthleteId: athlete.id.toString(),
-          accessToken: tokenData.access_token,
-          refreshToken: tokenData.refresh_token,
-          tokenExpiresAt: new Date(tokenData.expires_at * 1000),
-          firstName: athlete.firstname || "",
-          lastName: athlete.lastname || "",
-          profileImageUrl: athlete.profile_medium || athlete.profile,
-          city: athlete.city,
-          state: athlete.state,
-          country: athlete.country,
-          weatherEnabled: true,
-        },
+      const user = await userRepository.upsert({
+        stravaAthleteId: athlete.id.toString(),
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+        tokenExpiresAt: new Date(tokenData.expires_at * 1000),
+        firstName: athlete.firstname || "",
+        lastName: athlete.lastname || "",
+        profileImageUrl: athlete.profile_medium || athlete.profile,
+        city: athlete.city,
+        state: athlete.state,
+        country: athlete.country,
+        weatherEnabled: true,
       });
 
       logger.info("User authenticated successfully", {

@@ -1,6 +1,6 @@
 import { weatherService, type WeatherData } from "./weatherService";
 import { stravaApiService } from "./stravaApi";
-import { prisma } from "../lib";
+import { userRepository } from "../lib";
 import { createServiceLogger } from "../utils/logger";
 
 /**
@@ -91,17 +91,7 @@ export class ActivityProcessor {
     try {
       logger.info(`Processing activity ${activityId} for user ${userId}`);
 
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          accessToken: true,
-          refreshToken: true,
-          tokenExpiresAt: true,
-          weatherEnabled: true,
-          firstName: true,
-          lastName: true,
-        },
-      });
+      const user = await userRepository.findById(userId);
 
       if (!user) {
         logger.error(`User ${userId} not found`);
@@ -131,14 +121,10 @@ export class ActivityProcessor {
 
       // Update tokens if refreshed
       if (tokenData.wasRefreshed) {
-        await prisma.user.update({
-          where: { id: userId },
-          data: {
-            accessToken: tokenData.accessToken,
-            refreshToken: tokenData.refreshToken,
-            tokenExpiresAt: tokenData.expiresAt,
-            updatedAt: new Date(),
-          },
+        await userRepository.update(userId, {
+          accessToken: tokenData.accessToken,
+          refreshToken: tokenData.refreshToken,
+          tokenExpiresAt: tokenData.expiresAt,
         });
       }
 
