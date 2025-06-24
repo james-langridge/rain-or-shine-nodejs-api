@@ -97,7 +97,7 @@ export class StravaApiService {
    */
   async updateActivity(
     activityId: string,
-    accessToken: string, // No longer encrypted!
+    accessToken: string,
     updateData: StravaUpdateData,
   ): Promise<StravaActivity> {
     this.serviceLogger.debug("Updating activity on Strava", {

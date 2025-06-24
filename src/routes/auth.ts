@@ -136,8 +136,6 @@ authRouter.get(
 /**
  * Revoke Strava access and delete account
  * DELETE /api/auth/revoke
- *
- * Note: Simplified - no token decryption needed!
  */
 authRouter.delete(
   "/revoke",
