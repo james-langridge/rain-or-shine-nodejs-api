@@ -1,6 +1,4 @@
-import "./instrument";
 import express from "express";
-import * as Sentry from "@sentry/node";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import session from "express-session";
@@ -24,14 +22,12 @@ import { authRouter } from "./routes/auth";
 import { usersRouter } from "./routes/users";
 import { activitiesRouter } from "./routes/activities";
 import { adminRouter } from "./routes/admin";
-import { sentryRouter } from "./routes/sentry";
 
 const requiredEnvVars = [
   "DATABASE_URL",
   "STRAVA_CLIENT_ID",
   "STRAVA_CLIENT_SECRET",
   "SESSION_SECRET",
-  "SENTRY_DSN",
 ];
 
 requiredEnvVars.forEach((varName) => {
@@ -64,8 +60,6 @@ const corsOptions: cors.CorsOptions = {
   credentials: true,
   maxAge: 86400, // 24 hours
 };
-
-app.use("/api/sentry", sentryRouter);
 
 /**
  * Global middleware stack
@@ -103,22 +97,9 @@ app.use(`${API_PREFIX}/activities`, standardRateLimit, activitiesRouter);
 app.use(`${API_PREFIX}/admin`, standardRateLimit, adminRouter);
 
 /**
- * Sentry error handler
- */
-Sentry.setupExpressErrorHandler(app);
-
-/**
  * Custom error handler
  */
 app.use(errorHandler);
-
-app.get("/debug-sentry", (req, res) => {
-  console.log("Debug Sentry route hit");
-  Sentry.captureMessage("Test message from debug-sentry route", "info");
-  throw new Error(
-    "Test Sentry error - if you see this in Sentry, it's working!",
-  );
-});
 
 const port = config.PORT;
 
@@ -128,7 +109,6 @@ const server = app.listen(port, async () => {
     environment: config.NODE_ENV,
     nodeVersion: process.version,
     pid: process.pid,
-    sentryEnabled: !!process.env.SENTRY_DSN,
     authMethod: "session",
   });
 
@@ -141,11 +121,6 @@ const server = app.listen(port, async () => {
       await ensureWebhooksInitialized();
     } catch (error) {
       logger.error("Failed to initialize webhooks", error);
-      Sentry.captureException(error, {
-        tags: {
-          component: "webhook-initialization",
-        },
-      });
     }
   }
 
@@ -154,9 +129,6 @@ const server = app.listen(port, async () => {
     webhook: `http://localhost:${port}${API_PREFIX}/strava/webhook`,
     oauth: `http://localhost:${port}${API_PREFIX}/auth/strava`,
     admin: `http://localhost:${port}${API_PREFIX}/admin/*`,
-    ...(config.isDevelopment && {
-      debugSentry: `http://localhost:${port}/debug-sentry`,
-    }),
   });
 });
 
@@ -165,8 +137,6 @@ const server = app.listen(port, async () => {
  */
 const gracefulShutdown = async (signal: NodeJS.Signals): Promise<void> => {
   logger.info("Shutdown signal received", { signal });
-
-  await Sentry.close(2000);
 
   server.close(async (err) => {
     if (err) {
@@ -212,11 +182,9 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 // Handle uncaught errors
 process.on("unhandledRejection", (reason, promise) => {
   logger.error("Unhandled promise rejection", { reason, promise });
-  Sentry.captureException(reason);
 });
 
 process.on("uncaughtException", (error) => {
   logger.error("Uncaught exception", error);
-  Sentry.captureException(error);
   gracefulShutdown("SIGTERM");
 });
