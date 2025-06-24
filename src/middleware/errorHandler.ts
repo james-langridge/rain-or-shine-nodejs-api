@@ -2,6 +2,11 @@ import type { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { config } from "../config/environment";
 import { logger } from "../utils/logger";
+import {
+  DatabaseError,
+  UniqueConstraintError,
+  NotFoundError,
+} from "../types/database";
 
 /**
  * Custom application error class
@@ -61,46 +66,67 @@ function handleZodError(error: ZodError): AppError {
 }
 
 /**
- * Transform Prisma database errors into AppError
- *
- * @see https://www.prisma.io/docs/reference/api-reference/error-reference
+ * Transform database errors into AppError
  */
-function handlePrismaError(error: any): AppError {
-  const errorMap: Record<string, { message: string; status: number }> = {
-    P2002: {
-      message:
-        "A unique constraint violation occurred. This record already exists.",
-      status: ERROR_CODES.CONFLICT,
-    },
-    P2025: {
-      message: "The requested record was not found.",
-      status: ERROR_CODES.NOT_FOUND,
-    },
-    P2003: {
-      message: "Foreign key constraint failed. Related record does not exist.",
-      status: ERROR_CODES.VALIDATION_ERROR,
-    },
-    P2014: {
-      message: "The provided data violates a database constraint.",
-      status: ERROR_CODES.VALIDATION_ERROR,
-    },
-    P2024: {
-      message: "Connection to the database timed out.",
-      status: ERROR_CODES.SERVICE_UNAVAILABLE,
-    },
-  };
-
-  const errorInfo = errorMap[error.code];
-
-  if (errorInfo) {
-    return new AppError(errorInfo.message, errorInfo.status);
+function handleDatabaseError(error: DatabaseError): AppError {
+  if (error instanceof UniqueConstraintError) {
+    return new AppError(
+      "A record with this information already exists.",
+      ERROR_CODES.CONFLICT,
+    );
   }
 
-  // Log unknown Prisma errors for investigation
-  logger.warn("Unknown Prisma error code", {
-    code: error.code,
-    message: error.message,
-  });
+  if (error instanceof NotFoundError) {
+    return new AppError(error.message, ERROR_CODES.NOT_FOUND);
+  }
+
+  // Handle PostgreSQL errors by code
+  if (error.code) {
+    const errorMap: Record<string, { message: string; status: number }> = {
+      "23505": {
+        // unique_violation
+        message: "A record with this information already exists.",
+        status: ERROR_CODES.CONFLICT,
+      },
+      "23503": {
+        // foreign_key_violation
+        message: "Related record does not exist.",
+        status: ERROR_CODES.VALIDATION_ERROR,
+      },
+      "23514": {
+        // check_violation
+        message: "The provided data violates a database constraint.",
+        status: ERROR_CODES.VALIDATION_ERROR,
+      },
+      "08006": {
+        // connection_failure
+        message: "Database connection failed.",
+        status: ERROR_CODES.SERVICE_UNAVAILABLE,
+      },
+      "08001": {
+        // unable_to_connect
+        message: "Unable to connect to database.",
+        status: ERROR_CODES.SERVICE_UNAVAILABLE,
+      },
+      "57014": {
+        // query_canceled
+        message: "Database query was cancelled.",
+        status: ERROR_CODES.SERVICE_UNAVAILABLE,
+      },
+    };
+
+    const errorInfo = errorMap[error.code];
+    if (errorInfo) {
+      return new AppError(errorInfo.message, errorInfo.status);
+    }
+
+    // Log unknown database error codes for investigation
+    logger.warn("Unknown database error code", {
+      code: error.code,
+      message: error.message,
+    });
+  }
+
   return new AppError("Database operation failed.", ERROR_CODES.INTERNAL_ERROR);
 }
 
@@ -171,8 +197,11 @@ export function errorHandler(
     appError = error;
   } else if (error instanceof ZodError) {
     appError = handleZodError(error);
+  } else if (error instanceof DatabaseError) {
+    appError = handleDatabaseError(error);
   } else if (error.name === "PrismaClientKnownRequestError") {
-    appError = handlePrismaError(error);
+    // Keep for backwards compatibility during transition
+    appError = handleDatabaseError(error as any);
   } else if (error.message?.toLowerCase().includes("strava")) {
     appError = handleExternalApiError(error, "Strava");
   } else if (error.message?.toLowerCase().includes("openweathermap")) {

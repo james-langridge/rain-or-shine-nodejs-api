@@ -5,7 +5,7 @@ import { logger } from "../utils/logger";
 import { asyncHandler } from "../middleware/errorHandler";
 import crypto from "crypto";
 import { stravaApiService } from "../services/stravaApi";
-import { prisma } from "../lib";
+import { userRepository } from "../lib";
 
 const authRouter = Router();
 
@@ -156,22 +156,17 @@ authRouter.delete(
 
     try {
       // Get user with tokens
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { accessToken: true },
-      });
+      const user = await userRepository.findById(userId);
 
       if (user?.accessToken) {
-        // Revoke token with Strava (no decryption needed!)
+        // Revoke token with Strava
         await stravaApiService.revokeToken(user.accessToken);
       }
     } catch (error) {
       logger.warn("Failed to revoke Strava token", { userId, error });
     }
 
-    await prisma.user.delete({
-      where: { id: userId },
-    });
+    await userRepository.delete(userId);
 
     // Logout
     req.logout(() => {

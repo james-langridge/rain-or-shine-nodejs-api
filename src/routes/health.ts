@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { config } from "../config/environment";
-import { prisma } from "../lib";
+import { database, healthCheck } from "../lib/database";
+import { sql } from "kysely";
 import type { Request, Response, NextFunction } from "express";
 
 const healthRouter = Router();
@@ -38,7 +39,7 @@ healthRouter.get("/", async (req: Request, res: Response) => {
 
   try {
     // Quick database check
-    await prisma.$queryRaw`SELECT 1`;
+    await sql`SELECT 1`.execute(database);
 
     const responseTime = Date.now() - startTime;
 
@@ -123,7 +124,7 @@ async function checkDatabase(): Promise<ServiceStatus> {
   const startTime = Date.now();
 
   try {
-    await prisma.$queryRaw`SELECT 1 as status`;
+    await sql`SELECT 1 as status`.execute(database);
 
     return {
       status: "healthy",
@@ -214,7 +215,7 @@ async function checkWeatherAPI(): Promise<ServiceStatus> {
 healthRouter.get("/ready", async (req: Request, res: Response) => {
   try {
     // Check critical dependencies only
-    await prisma.$queryRaw`SELECT 1`;
+    await sql`SELECT 1`.execute(database);
 
     res.status(200).json({
       status: "ready",
@@ -273,30 +274,28 @@ async function checkMigrationStatus(): Promise<{
 }> {
   try {
     // Check if essential tables exist
-    const tables = await prisma.$queryRaw<Array<{ table_name: string }>>`
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_type = 'BASE TABLE'
-            AND table_name IN ('users', 'user_preferences', '_prisma_migrations')
-        `;
+    const result = await sql<{ table_name: string }>`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_type = 'BASE TABLE'
+      AND table_name IN ('users', 'user_preferences', 'pgmigrations')
+    `.execute(database);
 
-    const tableNames = tables.map((t) => t.table_name);
+    const tableNames = result.rows.map((t) => t.table_name);
     const hasUserTable = tableNames.includes("users");
     const hasPreferencesTable = tableNames.includes("user_preferences");
-    const hasMigrationsTable = tableNames.includes("_prisma_migrations");
+    const hasMigrationsTable = tableNames.includes("pgmigrations");
 
     // Check migration status
     if (hasMigrationsTable) {
-      const pendingMigrations = await prisma.$queryRaw<
-        Array<{ count: number }>
-      >`
-                SELECT COUNT(*) as count 
-                FROM _prisma_migrations 
-                WHERE finished_at IS NULL
-            `;
+      const migrationResult = await sql<{ count: string }>`
+        SELECT COUNT(*) as count 
+        FROM pgmigrations 
+        WHERE finished_at IS NULL
+      `.execute(database);
 
-      const pendingCount = Number(pendingMigrations[0]?.count || 0);
+      const pendingCount = Number(migrationResult.rows[0]?.count || 0);
 
       return {
         isHealthy: hasUserTable && hasPreferencesTable && pendingCount === 0,

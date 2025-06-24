@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { prisma } from "../lib";
+import { userRepository } from "../lib";
 import { logger } from "../utils/logger";
 
 /**
@@ -50,18 +50,7 @@ export async function authenticateUser(
   }
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: {
-        id: true,
-        stravaAthleteId: true,
-        accessToken: true,
-        refreshToken: true,
-        weatherEnabled: true,
-        firstName: true,
-        lastName: true,
-      },
-    });
+    const user = await userRepository.findById(req.user.id);
 
     if (!user) {
       logger.warn("Session user not found in database", {
@@ -116,18 +105,7 @@ export async function optionalAuth(
 ): Promise<void> {
   if (req.isAuthenticated() && req.user) {
     try {
-      const user = await prisma.user.findUnique({
-        where: { id: req.user.id },
-        select: {
-          id: true,
-          stravaAthleteId: true,
-          accessToken: true,
-          refreshToken: true,
-          weatherEnabled: true,
-          firstName: true,
-          lastName: true,
-        },
-      });
+      const user = await userRepository.findById(req.user.id);
 
       if (user) {
         (req as any).user = user;

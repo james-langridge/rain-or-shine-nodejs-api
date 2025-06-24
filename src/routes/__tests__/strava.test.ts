@@ -11,17 +11,15 @@ import request from "supertest";
 import express from "express";
 import { stravaRouter } from "../strava";
 import { config } from "../../config/environment";
-import { prisma } from "../../lib";
+import { userRepository } from "../../lib";
 import { activityProcessor } from "../../services/activityProcessor";
 import { factories } from "../../test/setup";
 
 // Mock dependencies
 vi.mock("../../lib", () => ({
-  prisma: {
-    user: {
-      findUnique: vi.fn(),
-      delete: vi.fn(),
-    },
+  userRepository: {
+    findByStravaAthleteId: vi.fn(),
+    deleteByStravaAthleteId: vi.fn(),
   },
 }));
 
@@ -51,6 +49,12 @@ vi.mock("../../utils/logger", () => ({
       error: vi.fn(),
     })),
   },
+  createServiceLogger: vi.fn(() => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  })),
 }));
 
 describe("Strava Webhook Router", () => {
@@ -97,7 +101,9 @@ describe("Strava Webhook Router", () => {
     app.use("/api/strava", stravaRouter);
 
     // Default successful user lookup
-    (prisma.user.findUnique as MockedFunction<any>).mockResolvedValue(mockUser);
+    (
+      userRepository.findByStravaAthleteId as MockedFunction<any>
+    ).mockResolvedValue(mockUser);
 
     // Default successful activity processing
     (
@@ -180,15 +186,9 @@ describe("Strava Webhook Router", () => {
         });
 
         // Verify user lookup
-        expect(prisma.user.findUnique).toHaveBeenCalledWith({
-          where: { stravaAthleteId: "12345" },
-          select: {
-            id: true,
-            weatherEnabled: true,
-            firstName: true,
-            lastName: true,
-          },
-        });
+        expect(userRepository.findByStravaAthleteId).toHaveBeenCalledWith(
+          "12345",
+        );
 
         // Verify activity processing
         expect(activityProcessor.processActivity).toHaveBeenCalledWith(
@@ -266,9 +266,9 @@ describe("Strava Webhook Router", () => {
           stravaAthleteId: "12345",
         };
 
-        (prisma.user.delete as MockedFunction<any>).mockResolvedValue(
-          deletedUser,
-        );
+        (
+          userRepository.deleteByStravaAthleteId as MockedFunction<any>
+        ).mockResolvedValue(undefined);
 
         const response = await request(app)
           .post("/api/strava/webhook")
@@ -280,24 +280,18 @@ describe("Strava Webhook Router", () => {
           userId: "user-123",
         });
 
-        expect(prisma.user.delete).toHaveBeenCalledWith({
-          where: { stravaAthleteId: "12345" },
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            stravaAthleteId: true,
-          },
-        });
+        expect(userRepository.deleteByStravaAthleteId).toHaveBeenCalledWith(
+          "12345",
+        );
 
         expect(activityProcessor.processActivity).not.toHaveBeenCalled();
       });
 
       it("should handle deauthorization for non-existent user", async () => {
         const notFoundError = new Error("Record to delete does not exist");
-        (prisma.user.delete as MockedFunction<any>).mockRejectedValue(
-          notFoundError,
-        );
+        (
+          userRepository.deleteByStravaAthleteId as MockedFunction<any>
+        ).mockRejectedValue(notFoundError);
 
         const response = await request(app)
           .post("/api/strava/webhook")
@@ -306,22 +300,16 @@ describe("Strava Webhook Router", () => {
         expect(response.status).toBe(200);
         expect(response.body.message).toBe("Deauthorization acknowledged");
 
-        expect(prisma.user.delete).toHaveBeenCalledWith({
-          where: { stravaAthleteId: "12345" },
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            stravaAthleteId: true,
-          },
-        });
+        expect(userRepository.deleteByStravaAthleteId).toHaveBeenCalledWith(
+          "12345",
+        );
       });
 
       it("should handle unexpected errors during deauthorization", async () => {
         const unexpectedError = new Error("Database connection failed");
-        (prisma.user.delete as MockedFunction<any>).mockRejectedValue(
-          unexpectedError,
-        );
+        (
+          userRepository.deleteByStravaAthleteId as MockedFunction<any>
+        ).mockRejectedValue(unexpectedError);
 
         const response = await request(app)
           .post("/api/strava/webhook")
@@ -330,15 +318,9 @@ describe("Strava Webhook Router", () => {
         expect(response.status).toBe(200);
         expect(response.body.message).toBe("Deauthorization acknowledged");
 
-        expect(prisma.user.delete).toHaveBeenCalledWith({
-          where: { stravaAthleteId: "12345" },
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            stravaAthleteId: true,
-          },
-        });
+        expect(userRepository.deleteByStravaAthleteId).toHaveBeenCalledWith(
+          "12345",
+        );
       });
     });
 
@@ -357,7 +339,7 @@ describe("Strava Webhook Router", () => {
         expect(response.status).toBe(200);
         expect(response.body.message).toBe("Event acknowledged");
         expect(activityProcessor.processActivity).not.toHaveBeenCalled();
-        expect(prisma.user.delete).not.toHaveBeenCalled();
+        expect(userRepository.deleteByStravaAthleteId).not.toHaveBeenCalled();
       });
 
       it("should ignore activity non-create events", async () => {
@@ -373,11 +355,13 @@ describe("Strava Webhook Router", () => {
         expect(response.status).toBe(200);
         expect(response.body.message).toBe("Event acknowledged");
         expect(activityProcessor.processActivity).not.toHaveBeenCalled();
-        expect(prisma.user.delete).not.toHaveBeenCalled();
+        expect(userRepository.deleteByStravaAthleteId).not.toHaveBeenCalled();
       });
 
       it("should handle unknown user gracefully", async () => {
-        (prisma.user.findUnique as MockedFunction<any>).mockResolvedValue(null);
+        (
+          userRepository.findByStravaAthleteId as MockedFunction<any>
+        ).mockResolvedValue(null);
 
         const response = await request(app)
           .post("/api/strava/webhook")
@@ -390,9 +374,9 @@ describe("Strava Webhook Router", () => {
 
       it("should handle user with weather disabled", async () => {
         const disabledUser = { ...mockUser, weatherEnabled: false };
-        (prisma.user.findUnique as MockedFunction<any>).mockResolvedValue(
-          disabledUser,
-        );
+        (
+          userRepository.findByStravaAthleteId as MockedFunction<any>
+        ).mockResolvedValue(disabledUser);
 
         const response = await request(app)
           .post("/api/strava/webhook")

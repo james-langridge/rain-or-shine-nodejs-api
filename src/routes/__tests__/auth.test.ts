@@ -6,8 +6,60 @@ import passport from "passport";
 
 process.env.FRONTEND_URL = "http://localhost:3000";
 
+// Mock environment config to prevent validation errors in CI
+vi.mock("../../config/environment", () => ({
+  config: {
+    STRAVA_CLIENT_ID: "test-client-id",
+    STRAVA_CLIENT_SECRET: "test-client-secret",
+    SESSION_SECRET: "test-session-secret",
+    DATABASE_URL: "postgresql://test",
+    OPENWEATHERMAP_API_KEY: "test-weather-key",
+    STRAVA_WEBHOOK_VERIFY_TOKEN: "test-webhook-token",
+    APP_URL: "http://localhost:3000",
+    LOG_LEVEL: "info",
+    isProduction: false,
+    isDevelopment: true,
+    isTest: true,
+  },
+}));
+
+// Mock database to prevent connection attempts
+vi.mock("../../lib", () => ({
+  userRepository: {
+    findById: vi.fn(),
+    findByStravaAthleteId: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    deleteByStravaAthleteId: vi.fn(),
+    upsert: vi.fn(),
+  },
+}));
+
+// Mock logger to prevent imports that trigger environment validation
+vi.mock("../../utils/logger", () => ({
+  logger: {
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    child: vi.fn(() => ({
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    })),
+  },
+  createServiceLogger: vi.fn(() => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  })),
+}));
+
 import { authRouter } from "../auth";
-import { prisma } from "../../lib";
+import { userRepository } from "../../lib";
 import { stravaApiService } from "../../services/stravaApi";
 
 // Mock crypto before any imports that might use it
@@ -80,13 +132,12 @@ vi.mock("../../config/environment", () => ({
   },
 }));
 
-vi.mock("../../lib", () => ({
-  prisma: {
-    user: {
-      findUnique: vi.fn(),
-      upsert: vi.fn(),
-      delete: vi.fn(),
-    },
+vi.mock("../../repositories", () => ({
+  userRepository: {
+    findById: vi.fn(),
+    findByStravaAthleteId: vi.fn(),
+    upsert: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
@@ -187,7 +238,7 @@ describe("Session-based Auth Routes", () => {
         updatedAt: new Date(),
       };
 
-      (prisma.user.upsert as any).mockResolvedValue(mockUser);
+      (userRepository.upsert as any).mockResolvedValue(mockUser);
 
       const response = await agent
         .get("/api/auth/strava/callback")
@@ -199,15 +250,8 @@ describe("Session-based Auth Routes", () => {
       );
 
       // Verify user was created/updated
-      expect(prisma.user.upsert).toHaveBeenCalledWith({
-        where: { stravaAthleteId: "123456" },
-        update: expect.objectContaining({
-          accessToken: "strava-access-token",
-          refreshToken: "strava-refresh-token",
-          firstName: "John",
-          lastName: "Doe",
-        }),
-        create: expect.objectContaining({
+      expect(userRepository.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
           stravaAthleteId: "123456",
           accessToken: "strava-access-token",
           refreshToken: "strava-refresh-token",
@@ -215,7 +259,7 @@ describe("Session-based Auth Routes", () => {
           lastName: "Doe",
           weatherEnabled: true,
         }),
-      });
+      );
     });
 
     it("should handle OAuth error parameter", async () => {
@@ -324,8 +368,8 @@ describe("Session-based Auth Routes", () => {
         lastName: "Doe",
       };
 
-      (prisma.user.upsert as any).mockResolvedValue(mockUser);
-      (prisma.user.findUnique as any).mockResolvedValue(mockUser);
+      (userRepository.upsert as any).mockResolvedValue(mockUser);
+      (userRepository.findById as any).mockResolvedValue(mockUser);
 
       // Complete OAuth flow
       await agent
@@ -370,7 +414,7 @@ describe("Session-based Auth Routes", () => {
         }),
       } as any);
 
-      (prisma.user.upsert as any).mockResolvedValue({
+      (userRepository.upsert as any).mockResolvedValue({
         id: "user-123",
         stravaAthleteId: "123456",
       });
@@ -431,8 +475,8 @@ describe("Session-based Auth Routes", () => {
         accessToken: "strava-access-token",
       };
 
-      (prisma.user.upsert as any).mockResolvedValue(mockUser);
-      (prisma.user.findUnique as any).mockResolvedValue(mockUser);
+      (userRepository.upsert as any).mockResolvedValue(mockUser);
+      (userRepository.findById as any).mockResolvedValue(mockUser);
 
       await agent
         .get("/api/auth/strava/callback")
@@ -440,7 +484,7 @@ describe("Session-based Auth Routes", () => {
 
       // Mock successful revocation and deletion
       (stravaApiService.revokeToken as any).mockResolvedValue(undefined);
-      (prisma.user.delete as any).mockResolvedValue(mockUser);
+      (userRepository.delete as any).mockResolvedValue(undefined);
 
       const response = await agent.delete("/api/auth/revoke");
 
@@ -456,9 +500,7 @@ describe("Session-based Auth Routes", () => {
       );
 
       // Verify user was deleted
-      expect(prisma.user.delete).toHaveBeenCalledWith({
-        where: { id: "user-123" },
-      });
+      expect(userRepository.delete).toHaveBeenCalledWith("user-123");
     });
 
     it("should require authentication", async () => {
@@ -497,8 +539,8 @@ describe("Session-based Auth Routes", () => {
         accessToken: "strava-access-token",
       };
 
-      (prisma.user.upsert as any).mockResolvedValue(mockUser);
-      (prisma.user.findUnique as any).mockResolvedValue(mockUser);
+      (userRepository.upsert as any).mockResolvedValue(mockUser);
+      (userRepository.findById as any).mockResolvedValue(mockUser);
 
       await agent
         .get("/api/auth/strava/callback")
@@ -508,7 +550,7 @@ describe("Session-based Auth Routes", () => {
       (stravaApiService.revokeToken as any).mockRejectedValue(
         new Error("Revocation failed"),
       );
-      (prisma.user.delete as any).mockResolvedValue(mockUser);
+      (userRepository.delete as any).mockResolvedValue(undefined);
 
       const response = await agent.delete("/api/auth/revoke");
 
@@ -524,9 +566,7 @@ describe("Session-based Auth Routes", () => {
       );
 
       // User should still be deleted
-      expect(prisma.user.delete).toHaveBeenCalledWith({
-        where: { id: "user-123" },
-      });
+      expect(userRepository.delete).toHaveBeenCalledWith("user-123");
     });
   });
 });

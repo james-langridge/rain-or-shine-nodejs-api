@@ -156,8 +156,8 @@ const gracefulShutdown = async (signal: NodeJS.Signals): Promise<void> => {
       }
 
       // Close database connections
-      const { prisma } = await import("./lib");
-      await prisma.$disconnect();
+      const { disconnect } = await import("./lib/database");
+      await disconnect();
       logger.info("Database connections closed");
 
       logger.info("Graceful shutdown completed");

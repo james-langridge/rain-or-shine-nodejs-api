@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { config } from "../config/environment";
-import { prisma } from "../lib";
+import { userRepository } from "../lib";
 import {
   activityProcessor,
   type ProcessingResult,
@@ -137,46 +137,40 @@ stravaRouter.post(
         });
 
         try {
-          // Find and delete user by stravaAthleteId
-          const deletedUser = await prisma.user.delete({
-            where: { stravaAthleteId },
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              stravaAthleteId: true,
-            },
-          });
+          // Find user first to get details for logging
+          const user =
+            await userRepository.findByStravaAthleteId(stravaAthleteId);
+
+          if (!user) {
+            logger.info("Deauthorization for non-existent user", {
+              stravaAthleteId,
+              requestId,
+            });
+            res.status(200).json({ message: "Deauthorization acknowledged" });
+            return;
+          }
+
+          // Delete user by stravaAthleteId
+          await userRepository.deleteByStravaAthleteId(stravaAthleteId);
 
           logger.info("User data deleted following deauthorization", {
-            userId: deletedUser.id,
-            userName: `${deletedUser.firstName} ${deletedUser.lastName}`,
-            stravaAthleteId: deletedUser.stravaAthleteId,
+            userId: user.id,
+            userName: `${user.firstName} ${user.lastName}`,
+            stravaAthleteId: user.stravaAthleteId,
             requestId,
           });
 
           res.status(200).json({
             message: "Deauthorization processed",
-            userId: deletedUser.id,
+            userId: user.id,
           });
           return;
         } catch (error) {
-          // User not found is not an error - they may have already been deleted
-          if (
-            error instanceof Error &&
-            error.message.includes("Record to delete does not exist")
-          ) {
-            logger.info("Deauthorization for non-existent user", {
-              stravaAthleteId,
-              requestId,
-            });
-          } else {
-            logger.warn("Error during user deauthorization", {
-              stravaAthleteId,
-              error: error instanceof Error ? error.message : "Unknown error",
-              requestId,
-            });
-          }
+          logger.warn("Error during user deauthorization", {
+            stravaAthleteId,
+            error: error instanceof Error ? error.message : "Unknown error",
+            requestId,
+          });
 
           // Always return 200 to prevent Strava retries
           res.status(200).json({ message: "Deauthorization acknowledged" });
@@ -199,15 +193,7 @@ stravaRouter.post(
       const stravaAthleteId = event.owner_id.toString();
 
       // Check if user exists and has weather enabled
-      const user = await prisma.user.findUnique({
-        where: { stravaAthleteId },
-        select: {
-          id: true,
-          weatherEnabled: true,
-          firstName: true,
-          lastName: true,
-        },
-      });
+      const user = await userRepository.findByStravaAthleteId(stravaAthleteId);
 
       if (!user) {
         logger.info("Activity webhook for unknown user", {
