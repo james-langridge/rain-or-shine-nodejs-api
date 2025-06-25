@@ -34,11 +34,17 @@ Strava API interaction layer providing:
 - Account revocation and cleanup
 
 #### WeatherService
-Weather data provider with intelligent caching:
+Weather data provider with:
 - Automatic selection between current and historical weather data
 - 5-day historical data support via Time Machine API
-- In-memory caching with coordinate and time rounding
 - Comprehensive error handling with timeouts and retries
+
+#### MetricsService
+System performance monitoring and observability:
+- Webhook processing performance tracking
+- API response time and success rate monitoring
+- OAuth token refresh metrics
+- System health and operational insights
 
 ### Database Schema
 
@@ -110,6 +116,9 @@ CREATE TABLE user_preferences (
 
 #### Administration (`/admin`)
 - Administrative endpoints (protected by admin token)
+
+#### Metrics (`/metrics`)
+- System performance metrics and API statistics
 
 #### Health (`/health`)
 - Application and database health checks
@@ -303,9 +312,7 @@ Runtime validation with Zod schemas:
 ## Performance Optimizations
 
 - **Database Connection Pooling**: Configurable connection limits
-- **Weather Data Caching**: Coordinate and time-based intelligent caching
 - **Query Optimization**: Raw SQL for complex operations
-- **Memory Management**: Automatic cache cleanup and monitoring
 
 ## Error Handling and Reliability
 
@@ -320,4 +327,4 @@ Runtime validation with Zod schemas:
 - **Structured Logging**: Winston with JSON format
 - **Health Endpoints**: Application and dependency monitoring
 - **Error Tracking**: Categorized error logging
-- **Performance Metrics**: Request timing and database query monitoring
+- **Performance Metrics**: API response times, webhook processing, and system health statistics
