@@ -34,9 +34,19 @@ export interface UserPreferenceTable {
   updatedAt: Date;
 }
 
+export interface MetricsTable {
+  id?: number; // Optional for inserts (auto-generated)
+  metric_type: "webhook_processing" | "api_call" | "token_refresh";
+  metric_name: string;
+  value: number;
+  metadata: string | null;
+  created_at: Date;
+}
+
 export interface Database {
   users: UserTable;
   user_preferences: UserPreferenceTable;
+  metrics: MetricsTable;
 }
 
 // Create the database connection

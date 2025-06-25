@@ -2,6 +2,7 @@ import { weatherService, type WeatherData } from "./weatherService";
 import { stravaApiService } from "./stravaApi";
 import { userRepository } from "../lib";
 import { createServiceLogger } from "../utils/logger";
+import { metricsService } from "./metricsService";
 
 /**
  * Activity processing result interface
@@ -87,7 +88,10 @@ export class ActivityProcessor {
   async processActivity(
     activityId: string,
     userId: string,
+    retryCount: number = 0,
   ): Promise<ProcessingResult> {
+    const startTime = Date.now();
+
     try {
       logger.info(`Processing activity ${activityId} for user ${userId}`);
 
@@ -113,6 +117,7 @@ export class ActivityProcessor {
       }
 
       // Ensure valid Strava token
+      const tokenRefreshStart = Date.now();
       const tokenData = await stravaApiService.ensureValidToken(
         user.accessToken,
         user.refreshToken,
@@ -121,6 +126,13 @@ export class ActivityProcessor {
 
       // Update tokens if refreshed
       if (tokenData.wasRefreshed) {
+        const tokenRefreshDuration = Date.now() - tokenRefreshStart;
+        await metricsService.recordTokenRefresh(
+          parseInt(userId),
+          true,
+          tokenRefreshDuration,
+        );
+
         await userRepository.update(userId, {
           accessToken: tokenData.accessToken,
           refreshToken: tokenData.refreshToken,
@@ -188,6 +200,15 @@ export class ActivityProcessor {
 
       logger.info(`Activity ${activityId} updated with weather data`);
 
+      // Record successful processing
+      const duration = Date.now() - startTime;
+      await metricsService.recordWebhookProcessing(
+        activityId,
+        duration,
+        true,
+        retryCount,
+      );
+
       return {
         success: true,
         activityId,
@@ -195,6 +216,16 @@ export class ActivityProcessor {
       };
     } catch (error) {
       logger.error(`Error processing activity ${activityId}:`, error);
+
+      // Record failed processing
+      const duration = Date.now() - startTime;
+      await metricsService.recordWebhookProcessing(
+        activityId,
+        duration,
+        false,
+        retryCount,
+      );
+
       return {
         success: false,
         activityId,

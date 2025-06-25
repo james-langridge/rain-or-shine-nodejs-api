@@ -194,6 +194,7 @@ describe("Strava Webhook Router", () => {
         expect(activityProcessor.processActivity).toHaveBeenCalledWith(
           "123456",
           "user-123",
+          0,
         );
       });
 
