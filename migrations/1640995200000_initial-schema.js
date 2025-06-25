@@ -1,8 +1,9 @@
 /* eslint-disable camelcase */
 
 exports.up = (pgm) => {
-  // Create users table
+  // Create users table if it doesn't exist
   pgm.createTable("users", {
+    ifNotExists: true,
     id: {
       type: "text",
       primaryKey: true,
@@ -60,8 +61,9 @@ exports.up = (pgm) => {
     },
   });
 
-  // Create user_preferences table
+  // Create user_preferences table if it doesn't exist
   pgm.createTable("user_preferences", {
+    ifNotExists: true,
     id: {
       type: "text",
       primaryKey: true,
@@ -126,12 +128,13 @@ exports.up = (pgm) => {
     `,
   );
 
-  // Create triggers to automatically update updatedAt
+  // Create triggers to automatically update updatedAt (if they don't exist)
   pgm.createTrigger("users", "update_users_updated_at", {
     when: "BEFORE",
     operation: "UPDATE",
     function: "update_updated_at_column",
     level: "ROW",
+    ifNotExists: true,
   });
 
   pgm.createTrigger("user_preferences", "update_user_preferences_updated_at", {
@@ -139,6 +142,7 @@ exports.up = (pgm) => {
     operation: "UPDATE",
     function: "update_updated_at_column",
     level: "ROW",
+    ifNotExists: true,
   });
 };
 
