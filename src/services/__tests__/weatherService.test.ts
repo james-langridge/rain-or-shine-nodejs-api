@@ -153,7 +153,7 @@ describe("WeatherService", () => {
 
   describe("getWeatherForActivity", () => {
     describe("current weather path", () => {
-      it("should fetch and cache current weather for recent activities", async () => {
+      it("should fetch current weather for recent activities", async () => {
         const activityTime = new Date("2024-01-15T11:30:00Z"); // 30 minutes ago
         const lat = 52.52;
         const lon = 13.405;
@@ -184,7 +184,7 @@ describe("WeatherService", () => {
         );
       });
 
-      it("should return cached weather data on second call", async () => {
+      it("should fetch weather data on each call", async () => {
         const activityTime = new Date("2024-01-15T11:30:00Z");
         const lat = 52.52;
         const lon = 13.405;
@@ -207,7 +207,7 @@ describe("WeatherService", () => {
         );
 
         expect(result1).toEqual(result2);
-        expect(mockedAxios.get).toHaveBeenCalledTimes(1); // Only called once
+        expect(mockedAxios.get).toHaveBeenCalledTimes(2); // Called twice now
       });
     });
 
@@ -269,46 +269,6 @@ describe("WeatherService", () => {
             }),
           }),
         );
-      });
-    });
-
-    describe("caching behavior", () => {
-      it("should generate consistent cache keys for similar coordinates", async () => {
-        const activityTime = new Date("2024-01-15T11:30:00Z");
-        const activityId = "123456";
-
-        // Coordinates that should round to the same cache key (within precision)
-        await weatherService.getWeatherForActivity(
-          52.52001,
-          13.40501,
-          activityTime,
-          activityId,
-        );
-        await weatherService.getWeatherForActivity(
-          52.52002,
-          13.40502,
-          activityTime,
-          activityId,
-        );
-
-        // Should only make one API call due to coordinate rounding
-        expect(mockedAxios.get).toHaveBeenCalledTimes(1);
-      });
-
-      it("should round timestamps for consistent caching", async () => {
-        const lat = 52.52;
-        const lon = 13.405;
-        const activityId = "123456";
-
-        // Times that should round to same 15-minute interval
-        const time1 = new Date("2024-01-15T11:32:00Z");
-        const time2 = new Date("2024-01-15T11:37:00Z");
-
-        await weatherService.getWeatherForActivity(lat, lon, time1, activityId);
-        await weatherService.getWeatherForActivity(lat, lon, time2, activityId);
-
-        // Should only make one API call due to time rounding
-        expect(mockedAxios.get).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -528,15 +488,7 @@ describe("WeatherService", () => {
     });
   });
 
-  describe("cache management", () => {
-    it("should clear cache when requested", () => {
-      // Add some data to cache first
-      weatherService.clearCache();
-
-      // This is mainly to test the method exists and doesn't throw
-      expect(() => weatherService.clearCache()).not.toThrow();
-    });
-
+  describe("service lifecycle", () => {
     it("should destroy service cleanly", () => {
       expect(() => weatherService.destroy()).not.toThrow();
     });

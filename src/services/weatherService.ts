@@ -75,10 +75,6 @@ const logger = createServiceLogger("WeatherService");
  * Weather service configuration
  */
 const WEATHER_CONFIG = {
-  CACHE_EXPIRY_MS: 30 * 60 * 1000, // 30 minutes
-  CACHE_CLEANUP_INTERVAL_MS: 15 * 60 * 1000, // 15 minutes
-  COORDINATE_PRECISION: 4, // Decimal places (~11m accuracy)
-  TIME_ROUND_MINUTES: 15, // Round to nearest 15 minutes
   HISTORICAL_LIMIT_HOURS: 120, // 5 days (Time Machine limit)
   RECENT_ACTIVITY_THRESHOLD_HOURS: 1, // Use current data if < 1 hour old
   API_TIMEOUT_MS: 5000, // 5 seconds
@@ -88,33 +84,17 @@ const WEATHER_CONFIG = {
 /**
  * Weather service using OpenWeatherMap One Call API 3.0
  *
- * Provides weather data for Strava activities with intelligent caching
- * and automatic selection between current and historical data based on
- * activity age.
+ * Provides weather data for Strava activities with automatic
+ * selection between current and historical data based on activity age.
  *
  * Features:
- * - In-memory caching with automatic cleanup
  * - Historical data for activities up to 5 days old
  * - Current data for recent activities
- * - High-precision coordinate handling
+ * - Automatic API selection based on activity age
  */
 export class WeatherService {
-  private weatherCache: Map<string, WeatherData>;
-  private cleanupInterval: NodeJS.Timeout;
-
   constructor() {
-    this.weatherCache = new Map();
-
-    // Setup automatic cache cleanup
-    this.cleanupInterval = setInterval(
-      () => this.cleanupCache(),
-      WEATHER_CONFIG.CACHE_CLEANUP_INTERVAL_MS,
-    );
-
-    logger.info("Weather service initialized", {
-      cacheExpiryMinutes: WEATHER_CONFIG.CACHE_EXPIRY_MS / 60000,
-      cleanupIntervalMinutes: WEATHER_CONFIG.CACHE_CLEANUP_INTERVAL_MS / 60000,
-    });
+    logger.info("Weather service initialized");
   }
 
   /**
@@ -128,7 +108,7 @@ export class WeatherService {
    * @param lat - Latitude of activity location
    * @param lon - Longitude of activity location
    * @param activityTime - Activity start time
-   * @param activityId - Unique activity identifier for caching
+   * @param activityId - Unique activity identifier for logging
    * @returns Weather data for the specified time and location
    * @throws Error if weather data cannot be retrieved
    */
@@ -138,18 +118,6 @@ export class WeatherService {
     activityTime: Date,
     activityId: string,
   ): Promise<WeatherData> {
-    const cacheKey = this.getCacheKey(lat, lon, activityTime, activityId);
-    const cached = this.weatherCache.get(cacheKey);
-
-    if (cached) {
-      logger.debug("Weather cache hit", {
-        activityId,
-        cacheKey,
-        cachedTimestamp: cached.timestamp,
-      });
-      return cached;
-    }
-
     const logContext = {
       activityId,
       coordinates: { lat, lon },
@@ -192,9 +160,6 @@ export class WeatherService {
         );
         weatherData = await this.getCurrentWeatherFromOneCall(lat, lon);
       }
-
-      // Cache the result
-      this.weatherCache.set(cacheKey, weatherData);
 
       logger.info("Weather data retrieved successfully", {
         ...logContext,
@@ -332,61 +297,6 @@ export class WeatherService {
   }
 
   /**
-   * Generate cache key with high precision
-   *
-   * @param lat - Latitude
-   * @param lon - Longitude
-   * @param time - Activity time
-   * @param activityId - Activity ID
-   * @returns Cache key string
-   */
-  private getCacheKey(
-    lat: number,
-    lon: number,
-    time: Date,
-    activityId: string,
-  ): string {
-    // Round coordinates to configured precision
-    const factor = Math.pow(10, WEATHER_CONFIG.COORDINATE_PRECISION);
-    const roundedLat = Math.round(lat * factor) / factor;
-    const roundedLon = Math.round(lon * factor) / factor;
-
-    // Round time to nearest configured interval
-    const roundedTime = new Date(time);
-    const minutes =
-      Math.floor(roundedTime.getMinutes() / WEATHER_CONFIG.TIME_ROUND_MINUTES) *
-      WEATHER_CONFIG.TIME_ROUND_MINUTES;
-    roundedTime.setMinutes(minutes, 0, 0);
-
-    return `weather:${roundedLat}:${roundedLon}:${roundedTime.getTime()}:${activityId}`;
-  }
-
-  /**
-   * Clean up expired cache entries
-   */
-  private cleanupCache(): void {
-    const now = Date.now();
-    const initialSize = this.weatherCache.size;
-    let cleaned = 0;
-
-    for (const [key, value] of this.weatherCache.entries()) {
-      const cacheTime = new Date(value.timestamp).getTime();
-      if (now - cacheTime > WEATHER_CONFIG.CACHE_EXPIRY_MS) {
-        this.weatherCache.delete(key);
-        cleaned++;
-      }
-    }
-
-    if (cleaned > 0) {
-      logger.info("Weather cache cleanup completed", {
-        entriesRemoved: cleaned,
-        entriesRemaining: this.weatherCache.size,
-        initialSize,
-      });
-    }
-  }
-
-  /**
    * Handle API errors with appropriate logging and messages
    *
    * @param error - Axios error or generic error
@@ -419,23 +329,9 @@ export class WeatherService {
   }
 
   /**
-   * Clear the cache (useful for testing)
-   */
-  clearCache(): void {
-    const size = this.weatherCache.size;
-    this.weatherCache.clear();
-
-    logger.info("Weather cache cleared", {
-      entriesCleared: size,
-    });
-  }
-
-  /**
    * Cleanup method for graceful shutdown
    */
   destroy(): void {
-    clearInterval(this.cleanupInterval);
-    this.clearCache();
     logger.info("Weather service destroyed");
   }
 }
