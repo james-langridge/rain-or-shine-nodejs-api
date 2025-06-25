@@ -57,6 +57,10 @@ const createDatabase = () => {
     throw new Error("DATABASE_URL environment variable is required");
   }
 
+  // Parse the connection string to check for SSL parameters
+  const isSSLDisabled = connectionString.includes("?sslmode=disable") || 
+                        connectionString.includes("&sslmode=disable");
+  
   const pool = new Pool({
     connectionString,
     max: parseInt(process.env.DB_POOL_MAX || "20", 10),
@@ -65,8 +69,9 @@ const createDatabase = () => {
       process.env.DB_CONNECTION_TIMEOUT || "10000",
       10,
     ),
-    ssl:
-      process.env.NODE_ENV === "production"
+    ssl: isSSLDisabled 
+      ? false 
+      : process.env.NODE_ENV === "production"
         ? { rejectUnauthorized: false }
         : false,
   });
