@@ -43,6 +43,15 @@ vi.mock("../../config/environment", () => ({
   },
 }));
 
+// Mock metrics service to avoid database imports
+vi.mock("../metricsService", () => ({
+  metricsService: {
+    recordApiCall: vi.fn(),
+    recordWebhookProcessing: vi.fn(),
+    recordTokenRefresh: vi.fn(),
+  },
+}));
+
 describe("WeatherService", () => {
   let weatherService: WeatherService;
 

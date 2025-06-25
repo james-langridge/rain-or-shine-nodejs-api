@@ -250,7 +250,11 @@ stravaRouter.post(
             await new Promise((resolve) => setTimeout(resolve, delay));
           }
 
-          result = await activityProcessor.processActivity(activityId, user.id);
+          result = await activityProcessor.processActivity(
+            activityId,
+            user.id,
+            attempts,
+          );
 
           // Success or non-retryable failure
           if (result.success || result.skipped) {

@@ -22,6 +22,7 @@ import { authRouter } from "./routes/auth";
 import { usersRouter } from "./routes/users";
 import { activitiesRouter } from "./routes/activities";
 import { adminRouter } from "./routes/admin";
+import metricsRouter from "./routes/metrics";
 
 const requiredEnvVars = [
   "DATABASE_URL",
@@ -95,6 +96,7 @@ app.use(`${API_PREFIX}/strava`, standardRateLimit, stravaRouter);
 app.use(`${API_PREFIX}/users`, standardRateLimit, usersRouter);
 app.use(`${API_PREFIX}/activities`, standardRateLimit, activitiesRouter);
 app.use(`${API_PREFIX}/admin`, standardRateLimit, adminRouter);
+app.use(`${API_PREFIX}/metrics`, standardRateLimit, metricsRouter);
 
 /**
  * Custom error handler

@@ -1,5 +1,6 @@
 import { config } from "../config/environment";
 import { logger } from "../utils/logger";
+import { metricsService } from "./metricsService";
 
 /**
  * Strava API service
@@ -61,6 +62,7 @@ export class StravaApiService {
     accessToken: string,
   ): Promise<StravaActivity> {
     this.serviceLogger.debug("Fetching activity from Strava", { activityId });
+    const startTime = Date.now();
 
     try {
       const response = await fetch(`${this.baseUrl}/activities/${activityId}`, {
@@ -69,6 +71,14 @@ export class StravaApiService {
           "Content-Type": "application/json",
         },
       });
+
+      const duration = Date.now() - startTime;
+      await metricsService.recordApiCall(
+        "strava_api",
+        `GET /activities/${activityId}`,
+        duration,
+        response.status,
+      );
 
       if (!response.ok) {
         await this.handleApiError(response, "getActivity", { activityId });
@@ -84,6 +94,15 @@ export class StravaApiService {
 
       return activity;
     } catch (error) {
+      const duration = Date.now() - startTime;
+      await metricsService.recordApiCall(
+        "strava_api",
+        `GET /activities/${activityId}`,
+        duration,
+        undefined,
+        error instanceof Error ? error.message : "Unknown error",
+      );
+
       this.serviceLogger.error("Failed to fetch activity", {
         activityId,
         error: error instanceof Error ? error.message : "Unknown error",

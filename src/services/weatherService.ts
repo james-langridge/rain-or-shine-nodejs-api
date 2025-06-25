@@ -1,6 +1,7 @@
 import axios, { AxiosError } from "axios";
 import { config } from "../config/environment";
 import { createServiceLogger } from "../utils/logger";
+import { metricsService } from "./metricsService";
 
 /**
  * Weather data interface
@@ -208,16 +209,33 @@ export class WeatherService {
       coordinates: { lat, lon },
     });
 
+    const startTime = Date.now();
     try {
       const response = await axios.get<OneCallCurrentResponse>(url, {
         params,
         timeout: WEATHER_CONFIG.API_TIMEOUT_MS,
       });
 
+      const duration = Date.now() - startTime;
+      await metricsService.recordApiCall(
+        "weather_api",
+        "GET /onecall",
+        duration,
+        response.status,
+      );
+
       const current = response.data.current;
 
       return this.formatWeatherData(current);
     } catch (error) {
+      const duration = Date.now() - startTime;
+      await metricsService.recordApiCall(
+        "weather_api",
+        "GET /onecall",
+        duration,
+        undefined,
+        error instanceof Error ? error.message : "Unknown error",
+      );
       this.handleApiError(error, "One Call API");
     }
   }
@@ -253,16 +271,33 @@ export class WeatherService {
       unixTime: dt,
     });
 
+    const startTime = Date.now();
     try {
       const response = await axios.get<TimeMachineResponse>(url, {
         params,
         timeout: WEATHER_CONFIG.API_TIMEOUT_MS,
       });
 
+      const duration = Date.now() - startTime;
+      await metricsService.recordApiCall(
+        "weather_api",
+        "GET /timemachine",
+        duration,
+        response.status,
+      );
+
       const data = response.data.data[0]; // Time Machine returns array with single item
 
       return this.formatWeatherData(data);
     } catch (error) {
+      const duration = Date.now() - startTime;
+      await metricsService.recordApiCall(
+        "weather_api",
+        "GET /timemachine",
+        duration,
+        undefined,
+        error instanceof Error ? error.message : "Unknown error",
+      );
       this.handleApiError(error, "Time Machine API");
     }
   }

@@ -38,6 +38,21 @@ vi.mock("../../utils/logger", () => ({
       error: vi.fn(),
     })),
   },
+  createServiceLogger: vi.fn(() => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  })),
+}));
+
+// Mock metrics service to avoid database imports
+vi.mock("../metricsService", () => ({
+  metricsService: {
+    recordApiCall: vi.fn(),
+    recordWebhookProcessing: vi.fn(),
+    recordTokenRefresh: vi.fn(),
+  },
 }));
 
 describe("StravaApiService", () => {
