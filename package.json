@@ -19,7 +19,7 @@
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "clean": "rm -rf dist coverage",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write \"src/**/*.{ts,tsx,json}\" \"migrations/**/*.js\"",
+    "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "dependencies": {
