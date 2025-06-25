@@ -13,13 +13,13 @@ const logger = createServiceLogger("userPreferenceRepository");
 export class UserPreferenceRepository {
   async findByUserId(userId: string): Promise<UserPreference | null> {
     try {
-      const preference = await database
-        .selectFrom("user_preferences")
-        .selectAll()
-        .where("userId", "=", userId)
-        .executeTakeFirst();
+      const query = sql<UserPreference>`
+        SELECT * FROM user_preferences 
+        WHERE "userId" = ${userId}
+      `;
 
-      return preference || null;
+      const result = await query.execute(database);
+      return result.rows[0] || null;
     } catch (error) {
       logger.error("Failed to find user preference by user ID", {
         userId,
@@ -31,16 +31,37 @@ export class UserPreferenceRepository {
 
   async create(preferenceData: UserPreferenceInsert): Promise<UserPreference> {
     try {
-      const preference = await database
-        .insertInto("user_preferences")
-        .values({
-          id: sql`gen_random_uuid()`,
-          ...preferenceData,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow();
+      const query = sql<UserPreference>`
+        INSERT INTO user_preferences (
+          id,
+          "userId",
+          "temperatureUnit",
+          "weatherFormat",
+          "includeUvIndex",
+          "includeVisibility",
+          "customFormat",
+          "createdAt",
+          "updatedAt"
+        ) VALUES (
+          gen_random_uuid(),
+          ${preferenceData.userId},
+          ${preferenceData.temperatureUnit},
+          ${preferenceData.weatherFormat},
+          ${preferenceData.includeUvIndex},
+          ${preferenceData.includeVisibility},
+          ${preferenceData.customFormat},
+          ${new Date()},
+          ${new Date()}
+        )
+        RETURNING *
+      `;
+
+      const result = await query.execute(database);
+      const preference = result.rows[0];
+
+      if (!preference) {
+        throw new Error("Failed to create user preference");
+      }
 
       logger.info("User preference created", {
         preferenceId: preference.id,
@@ -58,26 +79,45 @@ export class UserPreferenceRepository {
 
   async upsert(preferenceData: UserPreferenceInsert): Promise<UserPreference> {
     try {
-      const preference = await database
-        .insertInto("user_preferences")
-        .values({
-          id: sql`gen_random_uuid()`,
-          ...preferenceData,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .onConflict((oc) =>
-          oc.column("userId").doUpdateSet({
-            temperatureUnit: preferenceData.temperatureUnit,
-            weatherFormat: preferenceData.weatherFormat,
-            includeUvIndex: preferenceData.includeUvIndex,
-            includeVisibility: preferenceData.includeVisibility,
-            customFormat: preferenceData.customFormat,
-            updatedAt: new Date(),
-          }),
+      const query = sql<UserPreference>`
+        INSERT INTO user_preferences (
+          id,
+          "userId",
+          "temperatureUnit",
+          "weatherFormat",
+          "includeUvIndex",
+          "includeVisibility",
+          "customFormat",
+          "createdAt",
+          "updatedAt"
+        ) VALUES (
+          gen_random_uuid(),
+          ${preferenceData.userId},
+          ${preferenceData.temperatureUnit},
+          ${preferenceData.weatherFormat},
+          ${preferenceData.includeUvIndex},
+          ${preferenceData.includeVisibility},
+          ${preferenceData.customFormat},
+          ${new Date()},
+          ${new Date()}
         )
-        .returningAll()
-        .executeTakeFirstOrThrow();
+        ON CONFLICT ("userId") 
+        DO UPDATE SET
+          "temperatureUnit" = EXCLUDED."temperatureUnit",
+          "weatherFormat" = EXCLUDED."weatherFormat",
+          "includeUvIndex" = EXCLUDED."includeUvIndex",
+          "includeVisibility" = EXCLUDED."includeVisibility",
+          "customFormat" = EXCLUDED."customFormat",
+          "updatedAt" = ${new Date()}
+        RETURNING *
+      `;
+
+      const result = await query.execute(database);
+      const preference = result.rows[0];
+
+      if (!preference) {
+        throw new Error("Failed to upsert user preference");
+      }
 
       logger.info("User preference upserted", {
         preferenceId: preference.id,
@@ -128,12 +168,14 @@ export class UserPreferenceRepository {
 
   async delete(userId: string): Promise<void> {
     try {
-      const result = await database
-        .deleteFrom("user_preferences")
-        .where("userId", "=", userId)
-        .executeTakeFirst();
+      const query = sql`
+        DELETE FROM user_preferences 
+        WHERE "userId" = ${userId}
+      `;
 
-      if (result.numDeletedRows === 0n) {
+      const result = await query.execute(database);
+
+      if (result.numAffectedRows === 0n) {
         throw new (require("../types/database").NotFoundError)(
           "UserPreference",
         );

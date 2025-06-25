@@ -14,13 +14,13 @@ const logger = createServiceLogger("userRepository");
 export class UserRepository {
   async findById(id: string): Promise<User | null> {
     try {
-      const user = await database
-        .selectFrom("users")
-        .selectAll()
-        .where("id", "=", id)
-        .executeTakeFirst();
+      const query = sql<User>`
+        SELECT * FROM users 
+        WHERE id = ${id}
+      `;
 
-      return user || null;
+      const result = await query.execute(database);
+      return result.rows[0] || null;
     } catch (error) {
       logger.error("Failed to find user by ID", { id, error });
       throw parseDatabaseError(error);
@@ -29,13 +29,13 @@ export class UserRepository {
 
   async findByStravaAthleteId(stravaAthleteId: string): Promise<User | null> {
     try {
-      const user = await database
-        .selectFrom("users")
-        .selectAll()
-        .where("stravaAthleteId", "=", stravaAthleteId)
-        .executeTakeFirst();
+      const query = sql<User>`
+        SELECT * FROM users 
+        WHERE "stravaAthleteId" = ${stravaAthleteId}
+      `;
 
-      return user || null;
+      const result = await query.execute(database);
+      return result.rows[0] || null;
     } catch (error) {
       logger.error("Failed to find user by Strava athlete ID", {
         stravaAthleteId,
@@ -47,23 +47,37 @@ export class UserRepository {
 
   async findWithPreferences(id: string): Promise<UserWithPreferences | null> {
     try {
-      const result = await database
-        .selectFrom("users")
-        .leftJoin("user_preferences", "users.id", "user_preferences.userId")
-        .selectAll("users")
-        .select([
-          "user_preferences.id as pref_id",
-          "user_preferences.userId as pref_userId",
-          "user_preferences.temperatureUnit as pref_temperatureUnit",
-          "user_preferences.weatherFormat as pref_weatherFormat",
-          "user_preferences.includeUvIndex as pref_includeUvIndex",
-          "user_preferences.includeVisibility as pref_includeVisibility",
-          "user_preferences.customFormat as pref_customFormat",
-          "user_preferences.createdAt as pref_createdAt",
-          "user_preferences.updatedAt as pref_updatedAt",
-        ])
-        .where("users.id", "=", id)
-        .executeTakeFirst();
+      type UserWithPrefsRow = User & {
+        pref_id: string | null;
+        pref_userId: string | null;
+        pref_temperatureUnit: string | null;
+        pref_weatherFormat: string | null;
+        pref_includeUvIndex: boolean | null;
+        pref_includeVisibility: boolean | null;
+        pref_customFormat: string | null;
+        pref_createdAt: Date | null;
+        pref_updatedAt: Date | null;
+      };
+
+      const query = sql<UserWithPrefsRow>`
+        SELECT 
+          u.*,
+          p.id as pref_id,
+          p."userId" as pref_userId,
+          p."temperatureUnit" as pref_temperatureUnit,
+          p."weatherFormat" as pref_weatherFormat,
+          p."includeUvIndex" as pref_includeUvIndex,
+          p."includeVisibility" as pref_includeVisibility,
+          p."customFormat" as pref_customFormat,
+          p."createdAt" as pref_createdAt,
+          p."updatedAt" as pref_updatedAt
+        FROM users u
+        LEFT JOIN user_preferences p ON u.id = p."userId"
+        WHERE u.id = ${id}
+      `;
+
+      const { rows } = await query.execute(database);
+      const result = rows[0];
 
       if (!result) return null;
 
@@ -89,8 +103,10 @@ export class UserRepository {
         ? {
             id: result.pref_id,
             userId: result.pref_userId!,
-            temperatureUnit: result.pref_temperatureUnit!,
-            weatherFormat: result.pref_weatherFormat!,
+            temperatureUnit: result.pref_temperatureUnit! as
+              | "fahrenheit"
+              | "celsius",
+            weatherFormat: result.pref_weatherFormat! as "detailed" | "simple",
             includeUvIndex: result.pref_includeUvIndex!,
             includeVisibility: result.pref_includeVisibility!,
             customFormat: result.pref_customFormat,
@@ -122,15 +138,15 @@ export class UserRepository {
     } = options;
 
     try {
-      const users = await database
-        .selectFrom("users")
-        .selectAll()
-        .orderBy(orderBy, orderDirection)
-        .limit(limit)
-        .offset(offset)
-        .execute();
+      const query = sql<User>`
+        SELECT * FROM users
+        ORDER BY ${sql.raw(`"${orderBy}"`)} ${sql.raw(orderDirection.toUpperCase())}
+        LIMIT ${limit}
+        OFFSET ${offset}
+      `;
 
-      return users;
+      const result = await query.execute(database);
+      return result.rows;
     } catch (error) {
       logger.error("Failed to find users", { options, error });
       throw parseDatabaseError(error);
@@ -139,16 +155,47 @@ export class UserRepository {
 
   async create(userData: UserInsert): Promise<User> {
     try {
-      const user = await database
-        .insertInto("users")
-        .values({
-          id: sql`gen_random_uuid()`,
-          ...userData,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow();
+      const query = sql<User>`
+        INSERT INTO users (
+          id,
+          "stravaAthleteId",
+          "accessToken",
+          "refreshToken",
+          "tokenExpiresAt",
+          "weatherEnabled",
+          "firstName",
+          "lastName",
+          "profileImageUrl",
+          city,
+          state,
+          country,
+          "createdAt",
+          "updatedAt"
+        ) VALUES (
+          gen_random_uuid(),
+          ${userData.stravaAthleteId},
+          ${userData.accessToken},
+          ${userData.refreshToken},
+          ${userData.tokenExpiresAt},
+          ${userData.weatherEnabled},
+          ${userData.firstName},
+          ${userData.lastName},
+          ${userData.profileImageUrl},
+          ${userData.city},
+          ${userData.state},
+          ${userData.country},
+          ${new Date()},
+          ${new Date()}
+        )
+        RETURNING *
+      `;
+
+      const result = await query.execute(database);
+      const user = result.rows[0];
+
+      if (!user) {
+        throw new Error("Failed to create user");
+      }
 
       logger.info("User created", { userId: user.id });
       return user;
@@ -163,31 +210,60 @@ export class UserRepository {
 
   async upsert(userData: UserInsert): Promise<User> {
     try {
-      const user = await database
-        .insertInto("users")
-        .values({
-          id: sql`gen_random_uuid()`,
-          ...userData,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .onConflict((oc) =>
-          oc.column("stravaAthleteId").doUpdateSet({
-            accessToken: userData.accessToken,
-            refreshToken: userData.refreshToken,
-            tokenExpiresAt: userData.tokenExpiresAt,
-            weatherEnabled: userData.weatherEnabled,
-            firstName: userData.firstName,
-            lastName: userData.lastName,
-            profileImageUrl: userData.profileImageUrl,
-            city: userData.city,
-            state: userData.state,
-            country: userData.country,
-            updatedAt: new Date(),
-          }),
+      const query = sql<User>`
+        INSERT INTO users (
+          id,
+          "stravaAthleteId",
+          "accessToken",
+          "refreshToken",
+          "tokenExpiresAt",
+          "weatherEnabled",
+          "firstName",
+          "lastName",
+          "profileImageUrl",
+          city,
+          state,
+          country,
+          "createdAt",
+          "updatedAt"
+        ) VALUES (
+          gen_random_uuid(),
+          ${userData.stravaAthleteId},
+          ${userData.accessToken},
+          ${userData.refreshToken},
+          ${userData.tokenExpiresAt},
+          ${userData.weatherEnabled},
+          ${userData.firstName},
+          ${userData.lastName},
+          ${userData.profileImageUrl},
+          ${userData.city},
+          ${userData.state},
+          ${userData.country},
+          ${new Date()},
+          ${new Date()}
         )
-        .returningAll()
-        .executeTakeFirstOrThrow();
+        ON CONFLICT ("stravaAthleteId") 
+        DO UPDATE SET
+          "accessToken" = EXCLUDED."accessToken",
+          "refreshToken" = EXCLUDED."refreshToken",
+          "tokenExpiresAt" = EXCLUDED."tokenExpiresAt",
+          "weatherEnabled" = EXCLUDED."weatherEnabled",
+          "firstName" = EXCLUDED."firstName",
+          "lastName" = EXCLUDED."lastName",
+          "profileImageUrl" = EXCLUDED."profileImageUrl",
+          city = EXCLUDED.city,
+          state = EXCLUDED.state,
+          country = EXCLUDED.country,
+          "updatedAt" = ${new Date()}
+        RETURNING *
+      `;
+
+      const result = await query.execute(database);
+      const user = result.rows[0];
+
+      if (!user) {
+        throw new Error("Failed to upsert user");
+      }
 
       logger.info("User upserted", { userId: user.id });
       return user;
@@ -234,12 +310,14 @@ export class UserRepository {
 
   async delete(id: string): Promise<void> {
     try {
-      const result = await database
-        .deleteFrom("users")
-        .where("id", "=", id)
-        .executeTakeFirst();
+      const query = sql`
+        DELETE FROM users 
+        WHERE id = ${id}
+      `;
 
-      if (result.numDeletedRows === 0n) {
+      const result = await query.execute(database);
+
+      if (result.numAffectedRows === 0n) {
         throw new (require("../types/database").NotFoundError)("User");
       }
 
@@ -252,12 +330,14 @@ export class UserRepository {
 
   async deleteByStravaAthleteId(stravaAthleteId: string): Promise<void> {
     try {
-      const result = await database
-        .deleteFrom("users")
-        .where("stravaAthleteId", "=", stravaAthleteId)
-        .executeTakeFirst();
+      const query = sql`
+        DELETE FROM users 
+        WHERE "stravaAthleteId" = ${stravaAthleteId}
+      `;
 
-      if (result.numDeletedRows === 0n) {
+      const result = await query.execute(database);
+
+      if (result.numAffectedRows === 0n) {
         throw new (require("../types/database").NotFoundError)("User");
       }
 
@@ -273,12 +353,14 @@ export class UserRepository {
 
   async count(): Promise<number> {
     try {
-      const result = await database
-        .selectFrom("users")
-        .select(sql<number>`count(*)`.as("count"))
-        .executeTakeFirstOrThrow();
+      const query = sql<{ count: number }>`
+        SELECT COUNT(*) as count 
+        FROM users
+      `;
 
-      return result.count;
+      const result = await query.execute(database);
+      const row = result.rows[0];
+      return row ? Number(row.count) : 0;
     } catch (error) {
       logger.error("Failed to count users", { error });
       throw parseDatabaseError(error);
