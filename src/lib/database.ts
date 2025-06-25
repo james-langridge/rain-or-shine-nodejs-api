@@ -57,30 +57,8 @@ const createDatabase = () => {
     throw new Error("DATABASE_URL environment variable is required");
   }
 
-  // Parse the connection string to check for SSL parameters
-  // If sslmode=disable is in the connection string, or if SSL is explicitly disabled via env var, don't use SSL
-  const isSSLDisabled =
-    connectionString.includes("sslmode=disable") ||
-    process.env.DB_SSL === "false";
-
-  // For Coolify environments, we need to check if the database is local
-  // Local databases in Docker networks typically don't support SSL
-  const isLocalDatabase =
-    connectionString.includes("localhost") ||
-    connectionString.includes("127.0.0.1") ||
-    connectionString.includes("coolify-db") ||
-    connectionString.includes("10.0.");
-
-  const shouldUseSSL =
-    !isSSLDisabled && !isLocalDatabase && process.env.NODE_ENV === "production";
-
-  logger.info("Database connection configuration", {
-    isSSLDisabled,
-    isLocalDatabase,
-    shouldUseSSL,
-    environment: process.env.NODE_ENV,
-  });
-
+  // For now, completely disable SSL to fix the Coolify deployment issue
+  // The Coolify PostgreSQL database doesn't support SSL connections
   const pool = new Pool({
     connectionString,
     max: parseInt(process.env.DB_POOL_MAX || "20", 10),
@@ -89,8 +67,12 @@ const createDatabase = () => {
       process.env.DB_CONNECTION_TIMEOUT || "10000",
       10,
     ),
-    // Only enable SSL for external production databases
-    ssl: shouldUseSSL ? { rejectUnauthorized: false } : false,
+    ssl: false, // Disable SSL completely
+  });
+
+  logger.info("Database connection configuration", {
+    ssl: false,
+    environment: process.env.NODE_ENV,
   });
 
   // Enhanced logging for queries
