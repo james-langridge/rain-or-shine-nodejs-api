@@ -96,7 +96,7 @@ export function resetWebhookInitialization(): void {
 /**
  * Get current initialization state
  *
- * @returns Current initialization state
+ * @returns {WebhookInitState} Current initialization state
  * @internal
  */
 export function isWebhookInitialized(): boolean {

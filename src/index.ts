@@ -7,6 +7,7 @@ import { sessionConfig } from "./config/session";
 import { config } from "./config/environment";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
+import expressJSDocSwagger from "express-jsdoc-swagger";
 import {
   standardRateLimit,
   strictRateLimit,
@@ -42,6 +43,48 @@ requiredEnvVars.forEach((varName) => {
  * Express application factory
  */
 const app = express();
+
+/**
+ * Swagger configuration
+ */
+const swaggerOptions = {
+  info: {
+    version: "1.0.0",
+    title: "Strava Weather Integration API",
+    description:
+      "API for automatically adding weather data to Strava activities",
+    contact: {
+      name: "API Support",
+      email: "support@ngridge.com",
+    },
+    license: {
+      name: "MIT",
+      url: "https://opensource.org/licenses/MIT",
+    },
+  },
+  security: {
+    SessionAuth: {
+      type: "apiKey",
+      scheme: "apiKey",
+      in: "cookie",
+      name: "connect.sid",
+    },
+  },
+  baseDir: __dirname,
+  filesPattern: "./**/*.ts",
+  swaggerUIPath: "/api/docs",
+  exposeSwaggerUI: true,
+  exposeApiDocs: false,
+  apiDocsPath: "/api/docs/spec",
+  notRequiredAsNullable: false,
+  swaggerUiOptions: {
+    customCss: ".swagger-ui .topbar { display: none }",
+    customSiteTitle: "Strava Weather API Documentation",
+  },
+  multiple: false,
+};
+
+expressJSDocSwagger(app)(swaggerOptions);
 
 // Trust proxy configuration for Coolify/Traefik
 app.set("trust proxy", true);
