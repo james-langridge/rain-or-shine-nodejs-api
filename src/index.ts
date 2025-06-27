@@ -7,7 +7,6 @@ import { sessionConfig } from "./config/session";
 import { config } from "./config/environment";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
-import expressJSDocSwagger from "express-jsdoc-swagger";
 import {
   standardRateLimit,
   strictRateLimit,
@@ -24,6 +23,7 @@ import { usersRouter } from "./routes/users";
 import { activitiesRouter } from "./routes/activities";
 import { adminRouter } from "./routes/admin";
 import metricsRouter from "./routes/metrics";
+import { docsRouter } from "./routes/docs";
 
 const requiredEnvVars = [
   "DATABASE_URL",
@@ -43,48 +43,6 @@ requiredEnvVars.forEach((varName) => {
  * Express application factory
  */
 const app = express();
-
-/**
- * Swagger configuration
- */
-const swaggerOptions = {
-  info: {
-    version: "1.0.0",
-    title: "Strava Weather Integration API",
-    description:
-      "API for automatically adding weather data to Strava activities",
-    contact: {
-      name: "API Support",
-      email: "support@ngridge.com",
-    },
-    license: {
-      name: "MIT",
-      url: "https://opensource.org/licenses/MIT",
-    },
-  },
-  security: {
-    SessionAuth: {
-      type: "apiKey",
-      scheme: "apiKey",
-      in: "cookie",
-      name: "connect.sid",
-    },
-  },
-  baseDir: __dirname,
-  filesPattern: "./**/*.ts",
-  swaggerUIPath: "/api/docs",
-  exposeSwaggerUI: true,
-  exposeApiDocs: false,
-  apiDocsPath: "/api/docs/spec",
-  notRequiredAsNullable: false,
-  swaggerUiOptions: {
-    customCss: ".swagger-ui .topbar { display: none }",
-    customSiteTitle: "Strava Weather API Documentation",
-  },
-  multiple: false,
-};
-
-expressJSDocSwagger(app)(swaggerOptions);
 
 // Trust proxy configuration for Coolify/Traefik
 app.set("trust proxy", true);
@@ -140,6 +98,9 @@ app.use(`${API_PREFIX}/users`, standardRateLimit, usersRouter);
 app.use(`${API_PREFIX}/activities`, standardRateLimit, activitiesRouter);
 app.use(`${API_PREFIX}/admin`, standardRateLimit, adminRouter);
 app.use(`${API_PREFIX}/metrics`, standardRateLimit, metricsRouter);
+
+// Documentation endpoint - no rate limiting needed
+app.use(`${API_PREFIX}/docs`, docsRouter);
 
 /**
  * Custom error handler
