@@ -19,6 +19,9 @@ COPY src ./src
 # Build TypeScript
 RUN npm run build
 
+# Copy docs directory to dist (for OpenAPI spec)
+RUN cp -r src/docs dist/
+
 # Production stage
 FROM node:22-alpine
 
