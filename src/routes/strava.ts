@@ -43,16 +43,9 @@ const WEBHOOK_CONFIG = {
 } as const;
 
 /**
- * Webhook verification endpoint
- *
  * GET /api/strava/webhook
  *
- * Handles Strava's webhook verification challenge during subscription setup.
- * Must respond with the challenge value to confirm endpoint ownership.
- *
- * @query hub.mode - Should be "subscribe" for verification
- * @query hub.verify_token - Token that must match our configured token
- * @query hub.challenge - Challenge string to echo back
+ * Webhook verification endpoint - handles Strava's verification challenge during setup.
  */
 stravaRouter.get("/webhook", (req: Request, res: Response): void => {
   const mode = req.query["hub.mode"];
@@ -79,18 +72,9 @@ stravaRouter.get("/webhook", (req: Request, res: Response): void => {
 });
 
 /**
- * Webhook event handler
- *
  * POST /api/strava/webhook
  *
- * Processes incoming Strava webhook events. Currently handles:
- * - New activity creation (activity.create)
- * - Athlete deauthorization (athlete.deauthorize) - deletes all user data
- *
- * Implements retry logic to handle race conditions where activities
- * may not be immediately available after creation notification.
- *
- * Always returns 200 OK to prevent Strava from retrying.
+ * Webhook event handler - processes incoming Strava webhook events for activity creation and deauthorization.
  */
 stravaRouter.post(
   "/webhook",
@@ -336,6 +320,11 @@ stravaRouter.post(
  *
  * Health check endpoint to verify webhook configuration and readiness.
  * Useful for monitoring and debugging webhook setup.
+ */
+/**
+ * GET /api/strava/webhook/status
+ *
+ * Check webhook endpoint status - returns current configuration and status.
  */
 stravaRouter.get("/webhook/status", (req: Request, res: Response): void => {
   const status = {

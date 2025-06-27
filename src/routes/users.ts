@@ -35,36 +35,10 @@ const preferencesUpdateSchema = z
 
 /**
  * GET /api/users/me
- * @summary Get current user profile
- * @description Returns the authenticated user's profile information including Strava data, weather preferences, and account metadata
- * @tags Users
- * @security SessionAuth
- * @returns {object} 200 - User profile information
- * @returns {object} 401 - Not authenticated
- * @returns {object} 404 - User profile not found
- * @example response - 200 - User profile
- * {
- *   "success": true,
- *   "data": {
- *     "id": "user123",
- *     "stravaAthleteId": "1234567",
- *     "firstName": "John",
- *     "lastName": "Doe",
- *     "displayName": "John Doe",
- *     "profileImageUrl": "https://example.com/profile.jpg",
- *     "location": "New York, NY, USA",
- *     "weatherEnabled": true,
- *     "preferences": {
- *       "temperatureUnit": "fahrenheit",
- *       "weatherFormat": "detailed",
- *       "includeUvIndex": true,
- *       "includeVisibility": true,
- *       "customFormat": null
- *     },
- *     "memberSince": "2024-01-01T00:00:00.000Z",
- *     "lastUpdated": "2024-01-01T00:00:00.000Z"
- *   }
- * }
+ *
+ * Get current user profile including Strava data, weather preferences,
+ * and account metadata. Returns comprehensive user information for
+ * authenticated users.
  */
 usersRouter.get(
   "/me",
@@ -136,29 +110,9 @@ usersRouter.get(
 
 /**
  * PATCH /api/users/me
- * @summary Update user settings
- * @description Updates basic user settings. Currently only supports toggling weather updates on/off
- * @tags Users
- * @security SessionAuth
- * @param {object} request.body.required - User settings update
- * @param {boolean} request.body.weatherEnabled.required - Enable/disable weather data on activities
- * @returns {object} 200 - Updated user settings
- * @returns {object} 400 - Invalid request data
- * @returns {object} 401 - Not authenticated
- * @example request - Update weather settings
- * {
- *   "weatherEnabled": false
- * }
- * @example response - 200 - Success response
- * {
- *   "success": true,
- *   "data": {
- *     "id": "user123",
- *     "weatherEnabled": false,
- *     "updatedAt": "2024-01-01T00:00:00.000Z"
- *   },
- *   "message": "User settings updated successfully"
- * }
+ *
+ * Update user settings like enabling/disabling weather data on activities.
+ * Currently only supports toggling the weatherEnabled flag.
  */
 usersRouter.patch(
   "/me",
@@ -212,43 +166,10 @@ usersRouter.patch(
 
 /**
  * PATCH /api/users/me/preferences
- * @summary Update weather preferences
- * @description Updates user's weather display preferences including units, format, and which data points to include
- * @tags Users
- * @security SessionAuth
- * @param {object} request.body.required - Weather preferences update
- * @param {string} request.body.temperatureUnit - Temperature unit ('fahrenheit' or 'celsius')
- * @param {string} request.body.weatherFormat - Display format ('detailed' or 'simple')
- * @param {boolean} request.body.includeUvIndex - Include UV index in weather data
- * @param {boolean} request.body.includeVisibility - Include visibility in weather data
- * @param {string} request.body.customFormat - Custom format string for weather display
- * @returns {object} 200 - Updated preferences
- * @returns {object} 400 - Invalid preferences data or no fields provided
- * @returns {object} 401 - Not authenticated
- * @example request - Update temperature unit
- * {
- *   "temperatureUnit": "celsius"
- * }
- * @example request - Update multiple preferences
- * {
- *   "temperatureUnit": "fahrenheit",
- *   "weatherFormat": "simple",
- *   "includeUvIndex": false,
- *   "customFormat": "🌡️ {temp} | {condition}"
- * }
- * @example response - 200 - Success response
- * {
- *   "success": true,
- *   "data": {
- *     "temperatureUnit": "fahrenheit",
- *     "weatherFormat": "simple",
- *     "includeUvIndex": false,
- *     "includeVisibility": true,
- *     "customFormat": "🌡️ {temp} | {condition}",
- *     "updatedAt": "2024-01-01T00:00:00.000Z"
- *   },
- *   "message": "Weather preferences updated successfully"
- * }
+ *
+ * Update weather display preferences including temperature units (celsius/fahrenheit),
+ * display format (detailed/simple), and which data points to include (UV index, visibility).
+ * Also supports custom format strings for weather display.
  */
 usersRouter.patch(
   "/me/preferences",
@@ -313,23 +234,9 @@ usersRouter.patch(
 
 /**
  * DELETE /api/users/me
- * @summary Delete user account
- * @description Permanently deletes the user account and all associated data. This action cannot be undone
- * @tags Users
- * @security SessionAuth
- * @returns {object} 200 - Account deleted successfully
- * @returns {object} 401 - Not authenticated
- * @returns {object} 500 - Database error during deletion
- * @example response - 200 - Success response
- * {
- *   "success": true,
- *   "message": "Your account has been deleted successfully"
- * }
- * @example response - 500 - Deletion failed
- * {
- *   "success": false,
- *   "error": "Failed to delete account. Please try again."
- * }
+ *
+ * Permanently delete the user account and all associated data including
+ * preferences, activities data, and Strava integration. This action cannot be undone.
  */
 usersRouter.delete(
   "/me",
