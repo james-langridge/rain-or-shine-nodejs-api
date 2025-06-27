@@ -1,0 +1,967 @@
+openapi: 3.0.0
+info:
+  title: Strava Weather API
+  version: 1.0.0
+  description: |
+    API for automatically adding weather data to Strava activities.
+
+    This service integrates with Strava's webhook system to automatically
+    add weather information to new activities based on their time and location.
+  contact:
+    name: API Support
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3001
+    description: Development server
+
+components:
+  securitySchemes:
+    SessionAuth:
+      type: apiKey
+      in: cookie
+      name: connect.sid
+      description: Session-based authentication using cookies
+    AdminAuth:
+      type: apiKey
+      in: header
+      name: x-admin-token
+      description: Admin authentication token for administrative operations
+
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Whether the operation was successful
+        message:
+          type: string
+          description: Human-readable message about the operation
+        data:
+          type: object
+          description: Response data (varies by endpoint)
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code (optional)
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "user123"
+        stravaAthleteId:
+          type: string
+          example: "1234567"
+        firstName:
+          type: string
+          example: "John"
+        lastName:
+          type: string
+          example: "Doe"
+        displayName:
+          type: string
+          example: "John Doe"
+        profileImageUrl:
+          type: string
+          nullable: true
+          example: "https://example.com/profile.jpg"
+        location:
+          type: string
+          nullable: true
+          example: "New York, NY, USA"
+        weatherEnabled:
+          type: boolean
+          example: true
+        memberSince:
+          type: string
+          format: date-time
+        lastUpdated:
+          type: string
+          format: date-time
+
+    UserPreferences:
+      type: object
+      properties:
+        temperatureUnit:
+          type: string
+          enum: [fahrenheit, celsius]
+          example: "fahrenheit"
+        weatherFormat:
+          type: string
+          enum: [detailed, simple]
+          example: "detailed"
+        includeUvIndex:
+          type: boolean
+          example: true
+        includeVisibility:
+          type: boolean
+          example: true
+        customFormat:
+          type: string
+          nullable: true
+          maxLength: 500
+          example: null
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        uptime:
+          type: number
+        environment:
+          type: string
+
+    WebhookSubscription:
+      type: object
+      properties:
+        id:
+          type: number
+        callback_url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    StravaWebhookEvent:
+      type: object
+      required:
+        - object_type
+        - object_id
+        - aspect_type
+        - owner_id
+        - subscription_id
+        - event_time
+      properties:
+        object_type:
+          type: string
+          enum: [activity, athlete]
+        object_id:
+          type: number
+        aspect_type:
+          type: string
+          enum: [create, update, delete, deauthorize]
+        updates:
+          type: object
+          description: Details of what was updated (optional)
+        owner_id:
+          type: number
+        subscription_id:
+          type: number
+        event_time:
+          type: number
+
+    ActivityProcessingResult:
+      type: object
+      properties:
+        activityId:
+          type: string
+        weatherData:
+          type: object
+          nullable: true
+          properties:
+            temperature:
+              type: number
+            humidity:
+              type: number
+            description:
+              type: string
+        skipped:
+          type: boolean
+        reason:
+          type: string
+          nullable: true
+        processingTime:
+          type: number
+
+paths:
+  # Authentication Endpoints
+  /api/auth/strava:
+    get:
+      summary: Initiate Strava OAuth flow
+      description: Redirects user to Strava authorization page to connect their account
+      tags: [Authentication]
+      responses:
+        "302":
+          description: Redirect to Strava OAuth page
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/auth/strava/callback:
+    get:
+      summary: Handle Strava OAuth callback
+      description: Processes the OAuth response from Strava and creates user session
+      tags: [Authentication]
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema:
+            type: string
+          description: Authorization code from Strava
+        - in: query
+          name: state
+          required: true
+          schema:
+            type: string
+          description: CSRF protection state token
+      responses:
+        "302":
+          description: Redirect to frontend success or error page
+
+  /api/auth/check:
+    get:
+      summary: Check authentication status
+      description: Returns whether user is authenticated and basic user info
+      tags: [Authentication]
+      responses:
+        "200":
+          description: Authentication status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          authenticated:
+                            type: boolean
+                          user:
+                            $ref: "#/components/schemas/User"
+                            nullable: true
+
+  /api/auth/logout:
+    post:
+      summary: Logout user
+      description: Destroys user session and clears authentication cookies
+      tags: [Authentication]
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "500":
+          description: Logout failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/auth/revoke:
+    delete:
+      summary: Revoke Strava access and delete account
+      description: Revokes access token with Strava and permanently deletes user account
+      tags: [Authentication]
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: Account deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # User Management Endpoints
+  /api/users/me:
+    get:
+      summary: Get current user profile
+      description: Returns the authenticated user's profile information including Strava data and weather preferences
+      tags: [Users]
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: User profile information
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: "#/components/schemas/User"
+                          - type: object
+                            properties:
+                              preferences:
+                                $ref: "#/components/schemas/UserPreferences"
+        "401":
+          description: Not authenticated
+        "404":
+          description: User profile not found
+
+    patch:
+      summary: Update user settings
+      description: Updates basic user settings like enabling/disabling weather data
+      tags: [Users]
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - weatherEnabled
+              properties:
+                weatherEnabled:
+                  type: boolean
+                  description: Enable/disable weather data on activities
+            example:
+              weatherEnabled: false
+      responses:
+        "200":
+          description: User settings updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          weatherEnabled:
+                            type: boolean
+                          updatedAt:
+                            type: string
+                            format: date-time
+        "400":
+          description: Invalid request data
+        "401":
+          description: Not authenticated
+
+    delete:
+      summary: Delete user account
+      description: Permanently deletes the user account and all associated data
+      tags: [Users]
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: Account deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Database error during deletion
+
+  /api/users/me/preferences:
+    patch:
+      summary: Update weather preferences
+      description: Updates user's weather display preferences including units, format, and data points
+      tags: [Users]
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                temperatureUnit:
+                  type: string
+                  enum: [fahrenheit, celsius]
+                weatherFormat:
+                  type: string
+                  enum: [detailed, simple]
+                includeUvIndex:
+                  type: boolean
+                includeVisibility:
+                  type: boolean
+                customFormat:
+                  type: string
+                  maxLength: 500
+            examples:
+              updateUnit:
+                summary: Update temperature unit
+                value:
+                  temperatureUnit: celsius
+              updateMultiple:
+                summary: Update multiple preferences
+                value:
+                  temperatureUnit: fahrenheit
+                  weatherFormat: simple
+                  includeUvIndex: false
+                  customFormat: "🌡️ {temp} | {condition}"
+      responses:
+        "200":
+          description: Preferences updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: "#/components/schemas/UserPreferences"
+                          - type: object
+                            properties:
+                              updatedAt:
+                                type: string
+                                format: date-time
+        "400":
+          description: Invalid preferences data or no fields provided
+        "401":
+          description: Not authenticated
+
+  # Activity Processing
+  /api/activities/process/{activityId}:
+    post:
+      summary: Process a specific activity
+      description: Manually triggers weather data processing for a specific Strava activity
+      tags: [Activities]
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: activityId
+          required: true
+          schema:
+            type: string
+            pattern: '^\d+$'
+          description: Strava activity ID (numeric string)
+      responses:
+        "200":
+          description: Activity processed successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ActivityProcessingResult"
+        "400":
+          description: Invalid activity ID format
+        "401":
+          description: Not authenticated
+        "404":
+          description: Activity not found or not accessible
+        "503":
+          description: Weather service unavailable
+
+  # Strava Webhook Endpoints
+  /api/strava/webhook:
+    get:
+      summary: Webhook verification endpoint
+      description: Handles Strava's webhook verification challenge during subscription setup
+      tags: [Strava]
+      parameters:
+        - in: query
+          name: hub.mode
+          required: true
+          schema:
+            type: string
+            enum: [subscribe]
+        - in: query
+          name: hub.verify_token
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: hub.challenge
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Verification successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hub.challenge:
+                    type: string
+        "403":
+          description: Verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      summary: Webhook event handler
+      description: |
+        Processes incoming Strava webhook events:
+        - New activity creation (adds weather data)
+        - Athlete deauthorization (deletes user data)
+
+        Always returns 200 OK to prevent Strava from retrying.
+      tags: [Strava]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StravaWebhookEvent"
+      responses:
+        "200":
+          description: Event processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+
+  /api/strava/webhook/status:
+    get:
+      summary: Check webhook endpoint status
+      description: Returns the current configuration and status of the Strava webhook endpoint
+      tags: [Strava]
+      responses:
+        "200":
+          description: Webhook status information
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          configured:
+                            type: boolean
+                          endpoint:
+                            type: string
+                          verifyTokenSet:
+                            type: boolean
+                          timestamp:
+                            type: string
+                            format: date-time
+
+  # Admin Endpoints
+  /api/admin/webhook/status:
+    get:
+      summary: View webhook subscription status
+      description: Check the current webhook subscription status with Strava
+      tags: [Admin]
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: Webhook status information
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          hasSubscription:
+                            type: boolean
+                          subscription:
+                            $ref: "#/components/schemas/WebhookSubscription"
+                            nullable: true
+                          webhookEndpoint:
+                            type: string
+                          verifyToken:
+                            type: string
+        "401":
+          description: Unauthorized - Admin access required
+
+  /api/admin/webhook/subscribe:
+    post:
+      summary: Create webhook subscription
+      description: Create a new webhook subscription with Strava
+      tags: [Admin]
+      security:
+        - AdminAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                callback_url:
+                  type: string
+                  description: Custom callback URL (optional)
+      responses:
+        "200":
+          description: Webhook subscription created successfully
+        "400":
+          description: Webhook endpoint is not accessible
+        "401":
+          description: Unauthorized - Admin access required
+
+  /api/admin/webhook/unsubscribe:
+    delete:
+      summary: Delete webhook subscription
+      description: Delete the current webhook subscription with Strava
+      tags: [Admin]
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: Webhook subscription deleted successfully
+        "401":
+          description: Unauthorized - Admin access required
+        "404":
+          description: No webhook subscription found
+
+  /api/admin/webhook/verify:
+    get:
+      summary: Test webhook endpoint
+      description: Verify that the webhook endpoint is accessible and working
+      tags: [Admin]
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: Webhook endpoint verification result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          callbackUrl:
+                            type: string
+                          verified:
+                            type: boolean
+        "401":
+          description: Unauthorized - Admin access required
+
+  /api/admin/webhook/setup:
+    post:
+      summary: One-click webhook setup
+      description: Automatically set up webhook subscription if none exists
+      tags: [Admin]
+      security:
+        - AdminAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                base_url:
+                  type: string
+                  description: Base URL for the webhook callback
+      responses:
+        "200":
+          description: Webhook setup completed
+        "400":
+          description: Webhook endpoint is not accessible
+        "401":
+          description: Unauthorized - Admin access required
+
+  /api/admin/webhook/monitor:
+    get:
+      summary: Monitor webhook processing
+      description: Shows recent webhook events and processing status
+      tags: [Admin]
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: Webhook monitoring information
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          webhook:
+                            type: object
+                            description: Current webhook subscription status
+                          recentActivity:
+                            type: object
+                            description: Recent webhook activity
+                          debugging:
+                            type: object
+                            description: Debugging tips and information
+                          environment:
+                            type: object
+                            description: Environment configuration
+        "401":
+          description: Unauthorized - Admin access required
+
+  # Health Check Endpoints
+  /api/health:
+    get:
+      summary: Basic health check
+      description: Fast endpoint for load balancer health checks
+      tags: [Health]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                  responseTime:
+                    type: string
+                    example: "45ms"
+                  environment:
+                    type: string
+        "503":
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/HealthStatus"
+                  - type: object
+                    properties:
+                      error:
+                        type: string
+
+  /api/health/detailed:
+    get:
+      summary: Comprehensive health check
+      description: Detailed status of all services and dependencies
+      tags: [Health]
+      responses:
+        "200":
+          description: Detailed health status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/HealthStatus"
+                  - type: object
+                    properties:
+                      version:
+                        type: string
+                      services:
+                        type: object
+                        properties:
+                          database:
+                            type: object
+                          strava_api:
+                            type: object
+                          weather_api:
+                            type: object
+                      performance:
+                        type: object
+                        properties:
+                          memory:
+                            type: object
+                          cpu:
+                            type: number
+        "503":
+          description: Service is unhealthy
+
+  /api/health/ready:
+    get:
+      summary: Readiness probe
+      description: For Kubernetes-style readiness checks
+      tags: [Health]
+      responses:
+        "200":
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+                  timestamp:
+                    type: string
+                    format: date-time
+        "503":
+          description: Service is not ready
+
+  /api/health/live:
+    get:
+      summary: Liveness probe
+      description: For Kubernetes-style liveness checks
+      tags: [Health]
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: alive
+                  timestamp:
+                    type: string
+                    format: date-time
+                  uptime:
+                    type: number
+
+  /api/health/migrations:
+    get:
+      summary: Check database migration status
+      description: Verify that database migrations have been applied correctly
+      tags: [Health]
+      responses:
+        "200":
+          description: Migrations are healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                  migrations:
+                    type: object
+                    properties:
+                      isHealthy:
+                        type: boolean
+                      hasTables:
+                        type: boolean
+                      tableCount:
+                        type: number
+        "503":
+          description: Migrations are unhealthy
+
+  # Metrics Endpoint
+  /api/metrics:
+    get:
+      summary: Get performance metrics
+      description: Performance metrics for the API including webhook processing and API response times
+      tags: [Metrics]
+      parameters:
+        - in: query
+          name: since
+          schema:
+            type: string
+            format: date-time
+          description: Start date for metrics period (defaults to last 7 days)
+      responses:
+        "200":
+          description: Performance metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period:
+                    type: string
+                  webhook_processing:
+                    type: object
+                    properties:
+                      total_processed:
+                        type: number
+                      success_rate:
+                        type: string
+                      avg_duration:
+                        type: string
+                      p95_duration:
+                        type: string
+                      avg_retries:
+                        type: string
+                  api_performance:
+                    type: object
+                    properties:
+                      strava:
+                        type: object
+                        properties:
+                          avg_response_time:
+                            type: string
+                          success_rate:
+                            type: string
+                      weather:
+                        type: object
+                        properties:
+                          avg_response_time:
+                            type: string
+                          success_rate:
+                            type: string
+                  token_refresh:
+                    type: object
+                    properties:
+                      success_rate:
+                        type: string
+                      avg_duration:
+                        type: string
+        "500":
+          description: Failed to fetch metrics
+
+tags:
+  - name: Authentication
+    description: User authentication and OAuth flow with Strava
+  - name: Users
+    description: User profile and preferences management
+  - name: Activities
+    description: Manual activity processing and weather data integration
+  - name: Strava
+    description: Strava webhook endpoints and integration
+  - name: Admin
+    description: Administrative operations (requires admin token)
+  - name: Health
+    description: Health check and monitoring endpoints
+  - name: Metrics
+    description: Performance and usage metrics

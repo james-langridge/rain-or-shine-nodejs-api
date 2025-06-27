@@ -31,52 +31,9 @@ interface ServiceStatus {
 }
 
 /**
- * @swagger
- * /api/health:
- *   get:
- *     summary: Basic health check
- *     description: Fast endpoint for load balancer health checks. Returns basic status and database connectivity
- *     tags:
- *       - Health
- *     responses:
- *       200:
- *         description: Service is healthy
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: healthy
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                 responseTime:
- *                   type: string
- *                   example: 45ms
- *                 environment:
- *                   type: string
- *                   example: production
- *       503:
- *         description: Service is unhealthy
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: unhealthy
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                 responseTime:
- *                   type: string
- *                 environment:
- *                   type: string
- *                 error:
- *                   type: string
+ * GET /api/health
+ *
+ * Basic health check - fast endpoint for load balancer health checks.
  */
 healthRouter.get("/", async (req: Request, res: Response) => {
   const startTime = Date.now();
@@ -108,51 +65,9 @@ healthRouter.get("/", async (req: Request, res: Response) => {
 });
 
 /**
- * @swagger
- * /api/health/detailed:
- *   get:
- *     summary: Comprehensive health check
- *     description: Detailed status of all services and dependencies
- *     tags:
- *       - Health
- *     responses:
- *       200:
- *         description: Detailed health status (may be healthy or degraded)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   enum: [healthy, unhealthy, degraded]
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                 uptime:
- *                   type: number
- *                 version:
- *                   type: string
- *                 environment:
- *                   type: string
- *                 services:
- *                   type: object
- *                   properties:
- *                     database:
- *                       type: object
- *                     strava_api:
- *                       type: object
- *                     weather_api:
- *                       type: object
- *                 performance:
- *                   type: object
- *                   properties:
- *                     memory:
- *                       type: object
- *                     cpu:
- *                       type: number
- *       503:
- *         description: Service is unhealthy
+ * GET /api/health/detailed
+ *
+ * Comprehensive health check - detailed status of all services and dependencies.
  */
 healthRouter.get(
   "/detailed",
@@ -296,42 +211,9 @@ async function checkWeatherAPI(): Promise<ServiceStatus> {
 }
 
 /**
- * @swagger
- * /api/health/ready:
- *   get:
- *     summary: Readiness probe
- *     description: For Kubernetes-style readiness checks
- *     tags:
- *       - Health
- *     responses:
- *       200:
- *         description: Service is ready
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: ready
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *       503:
- *         description: Service is not ready
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: not_ready
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                 error:
- *                   type: string
+ * GET /api/health/ready
+ *
+ * Readiness probe - for Kubernetes-style readiness checks.
  */
 healthRouter.get("/ready", async (req: Request, res: Response) => {
   try {
@@ -353,29 +235,9 @@ healthRouter.get("/ready", async (req: Request, res: Response) => {
 });
 
 /**
- * @swagger
- * /api/health/live:
- *   get:
- *     summary: Liveness probe
- *     description: For Kubernetes-style liveness checks
- *     tags:
- *       - Health
- *     responses:
- *       200:
- *         description: Service is alive
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: alive
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                 uptime:
- *                   type: number
+ * GET /api/health/live
+ *
+ * Liveness probe - for Kubernetes-style liveness checks.
  */
 healthRouter.get("/live", (req: Request, res: Response) => {
   res.status(200).json({
@@ -386,38 +248,9 @@ healthRouter.get("/live", (req: Request, res: Response) => {
 });
 
 /**
- * @swagger
- * /api/health/migrations:
- *   get:
- *     summary: Check database migration status
- *     description: Verify that database migrations have been applied correctly
- *     tags:
- *       - Health
- *     responses:
- *       200:
- *         description: Migrations are healthy
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: healthy
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                 migrations:
- *                   type: object
- *                   properties:
- *                     isHealthy:
- *                       type: boolean
- *                     hasTables:
- *                       type: boolean
- *                     tableCount:
- *                       type: number
- *       503:
- *         description: Migrations are unhealthy
+ * GET /api/health/migrations
+ *
+ * Check database migration status - verify migrations have been applied correctly.
  */
 healthRouter.get(
   "/migrations",
