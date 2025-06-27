@@ -31,8 +31,27 @@ interface ServiceStatus {
 }
 
 /**
- * GET /api/health - Basic health check
- * Fast endpoint for load balancer health checks
+ * GET /api/health
+ * @summary Basic health check
+ * @description Fast endpoint for load balancer health checks. Returns basic status and database connectivity
+ * @tags Health
+ * @returns {object} 200 - Service is healthy
+ * @returns {object} 503 - Service is unhealthy
+ * @example response - 200 - Healthy response
+ * {
+ *   "status": "healthy",
+ *   "timestamp": "2024-01-01T00:00:00.000Z",
+ *   "responseTime": "45ms",
+ *   "environment": "production"
+ * }
+ * @example response - 503 - Unhealthy response
+ * {
+ *   "status": "unhealthy",
+ *   "timestamp": "2024-01-01T00:00:00.000Z",
+ *   "responseTime": "2500ms",
+ *   "environment": "production",
+ *   "error": "Database connection failed"
+ * }
  */
 healthRouter.get("/", async (req: Request, res: Response) => {
   const startTime = Date.now();

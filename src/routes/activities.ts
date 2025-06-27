@@ -21,25 +21,59 @@ const processActivityParamsSchema = z.object({
 });
 
 /**
- * Process a specific activity
- *
- * POST /api/activities/process/:activityId
- *
- * Manually triggers weather data processing for a specific activity.
- * This endpoint is useful for:
- * - Processing activities that don't have weather data yet
- * - Reprocessing activities that failed automatic processing
- * - Testing weather integration
- *
- * Note: Activities that already have weather data will be skipped.
- *
- * @param activityId - Strava activity ID (numeric string)
- *
- * @returns Processing result with weather data if successful
- * @throws 400 - Invalid activity ID format
- * @throws 401 - User not authenticated
- * @throws 404 - Activity not found or not accessible
- * @throws 503 - Weather service unavailable
+ * POST /api/activities/process/:id
+ * @summary Process a specific activity
+ * @description Manually triggers weather data processing for a specific activity. Useful for processing activities that don't have weather data yet, reprocessing failed activities, or testing weather integration
+ * @tags Activities
+ * @security SessionAuth
+ * @param {string} id.path.required - Strava activity ID (numeric string)
+ * @returns {object} 200 - Activity processed successfully
+ * @returns {object} 400 - Invalid activity ID format
+ * @returns {object} 401 - Not authenticated
+ * @returns {object} 404 - Activity not found or not accessible
+ * @returns {object} 503 - Weather service unavailable
+ * @example response - 200 - Success response
+ * {
+ *   "success": true,
+ *   "message": "Activity processed successfully with weather data",
+ *   "data": {
+ *     "activityId": "1234567890",
+ *     "weatherData": {
+ *       "temperature": 72,
+ *       "humidity": 65,
+ *       "description": "Partly cloudy"
+ *     },
+ *     "skipped": false,
+ *     "reason": null,
+ *     "processingTime": 1250
+ *   }
+ * }
+ * @example response - 200 - Already processed
+ * {
+ *   "success": true,
+ *   "message": "Activity already contains weather data",
+ *   "data": {
+ *     "activityId": "1234567890",
+ *     "weatherData": null,
+ *     "skipped": true,
+ *     "reason": "Already has weather data",
+ *     "processingTime": 125
+ *   }
+ * }
+ * @example response - 404 - Activity not found
+ * {
+ *   "success": false,
+ *   "message": "Failed to process activity",
+ *   "error": {
+ *     "message": "Activity not found",
+ *     "code": "ACTIVITY_NOT_FOUND"
+ *   },
+ *   "data": {
+ *     "activityId": "1234567890",
+ *     "skipped": false,
+ *     "reason": null
+ *   }
+ * }
  */
 activitiesRouter.post(
   "/process/:activityId",

@@ -110,7 +110,7 @@ export class WeatherService {
    * @param lon - Longitude of activity location
    * @param activityTime - Activity start time
    * @param activityId - Unique activity identifier for logging
-   * @returns Weather data for the specified time and location
+   * @returns {Promise<WeatherData>} Weather data for the specified time and location
    * @throws Error if weather data cannot be retrieved
    */
   async getWeatherForActivity(
@@ -189,7 +189,7 @@ export class WeatherService {
    *
    * @param lat - Latitude
    * @param lon - Longitude
-   * @returns Current weather data
+   * @returns {Promise<WeatherData>} Current weather data
    * @throws Error if API request fails
    */
   private async getCurrentWeatherFromOneCall(
@@ -246,7 +246,7 @@ export class WeatherService {
    * @param lat - Latitude
    * @param lon - Longitude
    * @param time - Historical timestamp
-   * @returns Historical weather data
+   * @returns {Promise<WeatherData>} Historical weather data
    * @throws Error if API request fails
    */
   private async getHistoricalWeather(

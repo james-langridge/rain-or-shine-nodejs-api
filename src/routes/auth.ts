@@ -10,8 +10,17 @@ import { userRepository } from "../lib";
 const authRouter = Router();
 
 /**
- * Initiate Strava OAuth flow
  * GET /api/auth/strava
+ * @summary Initiate Strava OAuth flow
+ * @description Redirects user to Strava authorization page to connect their account
+ * @tags Authentication
+ * @returns 302 - Redirect to Strava OAuth page
+ * @returns {object} 500 - Server error
+ * @example response - 500 - Server error
+ * {
+ *   "success": false,
+ *   "error": "Internal server error"
+ * }
  */
 authRouter.get("/strava", (req: Request, res: Response) => {
   // Generate CSRF state token
@@ -29,8 +38,14 @@ authRouter.get("/strava", (req: Request, res: Response) => {
 });
 
 /**
- * Handle Strava OAuth callback
  * GET /api/auth/strava/callback
+ * @summary Handle Strava OAuth callback
+ * @description Processes the OAuth response from Strava and creates user session
+ * @tags Authentication
+ * @param {string} code.query.required - Authorization code from Strava
+ * @param {string} state.query.required - CSRF protection state token
+ * @returns 302 - Redirect to frontend success page
+ * @returns 302 - Redirect to frontend error page on failure
  */
 authRouter.get(
   "/strava/callback",
@@ -67,8 +82,18 @@ authRouter.get(
 );
 
 /**
- * Logout user
  * POST /api/auth/logout
+ * @summary Logout user
+ * @description Destroys user session and clears authentication cookies
+ * @tags Authentication
+ * @security SessionAuth
+ * @returns {object} 200 - Success response
+ * @returns {object} 500 - Server error
+ * @example response - 200 - Success response
+ * {
+ *   "success": true,
+ *   "message": "Logged out successfully"
+ * }
  */
 authRouter.post("/logout", (req: Request, res: Response) => {
   const userId = (req.user as any)?.id;
@@ -105,8 +130,29 @@ authRouter.post("/logout", (req: Request, res: Response) => {
 });
 
 /**
- * Check authentication status
  * GET /api/auth/check
+ * @summary Check authentication status
+ * @description Returns whether user is authenticated and basic user info
+ * @tags Authentication
+ * @returns {object} 200 - Authentication status
+ * @example response - 200 - Authenticated user
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "authenticated": true,
+ *     "user": {
+ *       "id": "user123",
+ *       "stravaAthleteId": "1234567"
+ *     }
+ *   }
+ * }
+ * @example response - 200 - Not authenticated
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "authenticated": false
+ *   }
+ * }
  */
 authRouter.get(
   "/check",
@@ -134,8 +180,23 @@ authRouter.get(
 );
 
 /**
- * Revoke Strava access and delete account
  * DELETE /api/auth/revoke
+ * @summary Revoke Strava access and delete account
+ * @description Revokes access token with Strava and permanently deletes user account
+ * @tags Authentication
+ * @security SessionAuth
+ * @returns {object} 200 - Account deleted successfully
+ * @returns {object} 401 - Not authenticated
+ * @example response - 200 - Success response
+ * {
+ *   "success": true,
+ *   "message": "Account deleted successfully"
+ * }
+ * @example response - 401 - Not authenticated
+ * {
+ *   "success": false,
+ *   "error": "Not authenticated"
+ * }
  */
 authRouter.delete(
   "/revoke",

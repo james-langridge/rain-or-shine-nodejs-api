@@ -34,16 +34,37 @@ const preferencesUpdateSchema = z
   });
 
 /**
- * Get current user profile
- *
  * GET /api/users/me
- *
- * Returns the authenticated user's profile information including
- * Strava data, weather preferences, and account metadata.
- *
- * @returns Complete user profile with formatted display fields
- * @throws 401 - User not authenticated
- * @throws 404 - User profile not found (data integrity issue)
+ * @summary Get current user profile
+ * @description Returns the authenticated user's profile information including Strava data, weather preferences, and account metadata
+ * @tags Users
+ * @security SessionAuth
+ * @returns {object} 200 - User profile information
+ * @returns {object} 401 - Not authenticated
+ * @returns {object} 404 - User profile not found
+ * @example response - 200 - User profile
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "id": "user123",
+ *     "stravaAthleteId": "1234567",
+ *     "firstName": "John",
+ *     "lastName": "Doe",
+ *     "displayName": "John Doe",
+ *     "profileImageUrl": "https://example.com/profile.jpg",
+ *     "location": "New York, NY, USA",
+ *     "weatherEnabled": true,
+ *     "preferences": {
+ *       "temperatureUnit": "fahrenheit",
+ *       "weatherFormat": "detailed",
+ *       "includeUvIndex": true,
+ *       "includeVisibility": true,
+ *       "customFormat": null
+ *     },
+ *     "memberSince": "2024-01-01T00:00:00.000Z",
+ *     "lastUpdated": "2024-01-01T00:00:00.000Z"
+ *   }
+ * }
  */
 usersRouter.get(
   "/me",
@@ -114,17 +135,30 @@ usersRouter.get(
 );
 
 /**
- * Update user settings
- *
  * PATCH /api/users/me
- *
- * Updates basic user settings. Currently only supports toggling
- * weather updates on/off.
- *
- * @body weatherEnabled - Enable/disable weather data on activities
- * @returns Updated user settings
- * @throws 400 - Invalid request data
- * @throws 401 - User not authenticated
+ * @summary Update user settings
+ * @description Updates basic user settings. Currently only supports toggling weather updates on/off
+ * @tags Users
+ * @security SessionAuth
+ * @param {object} request.body.required - User settings update
+ * @param {boolean} request.body.weatherEnabled.required - Enable/disable weather data on activities
+ * @returns {object} 200 - Updated user settings
+ * @returns {object} 400 - Invalid request data
+ * @returns {object} 401 - Not authenticated
+ * @example request - Update weather settings
+ * {
+ *   "weatherEnabled": false
+ * }
+ * @example response - 200 - Success response
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "id": "user123",
+ *     "weatherEnabled": false,
+ *     "updatedAt": "2024-01-01T00:00:00.000Z"
+ *   },
+ *   "message": "User settings updated successfully"
+ * }
  */
 usersRouter.patch(
   "/me",
@@ -177,21 +211,44 @@ usersRouter.patch(
 );
 
 /**
- * Update weather preferences
- *
  * PATCH /api/users/me/preferences
- *
- * Updates user's weather display preferences including units,
- * format, and which data points to include.
- *
- * @body temperatureUnit - 'fahrenheit' or 'celsius'
- * @body weatherFormat - 'detailed' or 'simple'
- * @body includeUvIndex - Include UV index in weather data
- * @body includeVisibility - Include visibility in weather data
- * @body customFormat - Custom format string for weather display
- * @returns Updated preferences
- * @throws 400 - Invalid preferences data or no fields provided
- * @throws 401 - User not authenticated
+ * @summary Update weather preferences
+ * @description Updates user's weather display preferences including units, format, and which data points to include
+ * @tags Users
+ * @security SessionAuth
+ * @param {object} request.body.required - Weather preferences update
+ * @param {string} request.body.temperatureUnit - Temperature unit ('fahrenheit' or 'celsius')
+ * @param {string} request.body.weatherFormat - Display format ('detailed' or 'simple')
+ * @param {boolean} request.body.includeUvIndex - Include UV index in weather data
+ * @param {boolean} request.body.includeVisibility - Include visibility in weather data
+ * @param {string} request.body.customFormat - Custom format string for weather display
+ * @returns {object} 200 - Updated preferences
+ * @returns {object} 400 - Invalid preferences data or no fields provided
+ * @returns {object} 401 - Not authenticated
+ * @example request - Update temperature unit
+ * {
+ *   "temperatureUnit": "celsius"
+ * }
+ * @example request - Update multiple preferences
+ * {
+ *   "temperatureUnit": "fahrenheit",
+ *   "weatherFormat": "simple",
+ *   "includeUvIndex": false,
+ *   "customFormat": "🌡️ {temp} | {condition}"
+ * }
+ * @example response - 200 - Success response
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "temperatureUnit": "fahrenheit",
+ *     "weatherFormat": "simple",
+ *     "includeUvIndex": false,
+ *     "includeVisibility": true,
+ *     "customFormat": "🌡️ {temp} | {condition}",
+ *     "updatedAt": "2024-01-01T00:00:00.000Z"
+ *   },
+ *   "message": "Weather preferences updated successfully"
+ * }
  */
 usersRouter.patch(
   "/me/preferences",
@@ -255,17 +312,24 @@ usersRouter.patch(
 );
 
 /**
- * Delete user account
- *
  * DELETE /api/users/me
- *
- * Permanently deletes the user account and all associated data.
- * This action cannot be undone. The user will need to re-authenticate
- * with Strava to use the service again.
- *
- * @returns Success message
- * @throws 401 - User not authenticated
- * @throws 500 - Database error during deletion
+ * @summary Delete user account
+ * @description Permanently deletes the user account and all associated data. This action cannot be undone
+ * @tags Users
+ * @security SessionAuth
+ * @returns {object} 200 - Account deleted successfully
+ * @returns {object} 401 - Not authenticated
+ * @returns {object} 500 - Database error during deletion
+ * @example response - 200 - Success response
+ * {
+ *   "success": true,
+ *   "message": "Your account has been deleted successfully"
+ * }
+ * @example response - 500 - Deletion failed
+ * {
+ *   "success": false,
+ *   "error": "Failed to delete account. Please try again."
+ * }
  */
 usersRouter.delete(
   "/me",
