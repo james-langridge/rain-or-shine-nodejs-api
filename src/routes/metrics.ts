@@ -6,8 +6,59 @@ const router = Router();
 const logger = createServiceLogger("metrics");
 
 /**
- * GET /api/metrics
- * Get performance metrics for the API
+ * @swagger
+ * /api/metrics:
+ *   get:
+ *     summary: Get performance metrics
+ *     description: Get performance metrics for the API including webhook processing, API response times, and token refresh statistics
+ *     tags:
+ *       - Metrics
+ *     parameters:
+ *       - in: query
+ *         name: since
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Start date for metrics period (defaults to last 7 days)
+ *     responses:
+ *       200:
+ *         description: Performance metrics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 period:
+ *                   type: string
+ *                 webhook_processing:
+ *                   type: object
+ *                   properties:
+ *                     total_processed:
+ *                       type: number
+ *                     success_rate:
+ *                       type: string
+ *                     avg_duration:
+ *                       type: string
+ *                     p95_duration:
+ *                       type: string
+ *                     avg_retries:
+ *                       type: string
+ *                 api_performance:
+ *                   type: object
+ *                   properties:
+ *                     strava:
+ *                       type: object
+ *                     weather:
+ *                       type: object
+ *                 token_refresh:
+ *                   type: object
+ *                   properties:
+ *                     success_rate:
+ *                       type: string
+ *                     avg_duration:
+ *                       type: string
+ *       500:
+ *         description: Failed to fetch metrics
  */
 router.get("/", async (req, res) => {
   try {

@@ -24,7 +24,38 @@ function requireAdminAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 /**
- * GET /api/admin/webhook/status - View current webhook subscription
+ * @swagger
+ * /api/admin/webhook/status:
+ *   get:
+ *     summary: View current webhook subscription status
+ *     description: Check the current webhook subscription status with Strava
+ *     tags:
+ *       - Admin
+ *     security:
+ *       - AdminAuth: []
+ *     responses:
+ *       200:
+ *         description: Webhook status information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     hasSubscription:
+ *                       type: boolean
+ *                     subscription:
+ *                       type: object
+ *                     webhookEndpoint:
+ *                       type: string
+ *                     verifyToken:
+ *                       type: string
+ *       401:
+ *         description: Unauthorized - Admin access required
  */
 adminRouter.get(
   "/webhook/status",
@@ -51,7 +82,31 @@ adminRouter.get(
 );
 
 /**
- * POST /api/admin/webhook/subscribe - Create webhook subscription
+ * @swagger
+ * /api/admin/webhook/subscribe:
+ *   post:
+ *     summary: Create webhook subscription
+ *     description: Create a new webhook subscription with Strava
+ *     tags:
+ *       - Admin
+ *     security:
+ *       - AdminAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               callback_url:
+ *                 type: string
+ *                 description: Optional custom callback URL (defaults to APP_URL/api/strava/webhook)
+ *     responses:
+ *       200:
+ *         description: Webhook subscription created successfully
+ *       400:
+ *         description: Webhook endpoint is not accessible
+ *       401:
+ *         description: Unauthorized - Admin access required
  */
 adminRouter.post(
   "/webhook/subscribe",
@@ -96,7 +151,22 @@ adminRouter.post(
 );
 
 /**
- * DELETE /api/admin/webhook/unsubscribe - Delete webhook subscription
+ * @swagger
+ * /api/admin/webhook/unsubscribe:
+ *   delete:
+ *     summary: Delete webhook subscription
+ *     description: Delete the current webhook subscription with Strava
+ *     tags:
+ *       - Admin
+ *     security:
+ *       - AdminAuth: []
+ *     responses:
+ *       200:
+ *         description: Webhook subscription deleted successfully
+ *       401:
+ *         description: Unauthorized - Admin access required
+ *       404:
+ *         description: No webhook subscription found
  */
 adminRouter.delete(
   "/webhook/unsubscribe",
@@ -127,7 +197,36 @@ adminRouter.delete(
 );
 
 /**
- * GET /api/admin/webhook/verify - Test webhook endpoint
+ * @swagger
+ * /api/admin/webhook/verify:
+ *   get:
+ *     summary: Test webhook endpoint
+ *     description: Verify that the webhook endpoint is accessible and working
+ *     tags:
+ *       - Admin
+ *     security:
+ *       - AdminAuth: []
+ *     responses:
+ *       200:
+ *         description: Webhook endpoint verification result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     callbackUrl:
+ *                       type: string
+ *                     verified:
+ *                       type: boolean
+ *       401:
+ *         description: Unauthorized - Admin access required
  */
 adminRouter.get(
   "/webhook/verify",
@@ -156,7 +255,31 @@ adminRouter.get(
 );
 
 /**
- * POST /api/admin/webhook/setup - One-click webhook setup
+ * @swagger
+ * /api/admin/webhook/setup:
+ *   post:
+ *     summary: One-click webhook setup
+ *     description: Automatically set up webhook subscription if none exists
+ *     tags:
+ *       - Admin
+ *     security:
+ *       - AdminAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               base_url:
+ *                 type: string
+ *                 description: Optional base URL for the webhook callback
+ *     responses:
+ *       200:
+ *         description: Webhook setup completed
+ *       400:
+ *         description: Webhook endpoint is not accessible
+ *       401:
+ *         description: Unauthorized - Admin access required
  */
 adminRouter.post(
   "/webhook/setup",
@@ -222,8 +345,42 @@ adminRouter.post(
 );
 
 /**
- * GET /api/admin/webhook/monitor - Monitor webhook processing
- * Shows recent webhook events and processing status
+ * @swagger
+ * /api/admin/webhook/monitor:
+ *   get:
+ *     summary: Monitor webhook processing
+ *     description: Shows recent webhook events and processing status
+ *     tags:
+ *       - Admin
+ *     security:
+ *       - AdminAuth: []
+ *     responses:
+ *       200:
+ *         description: Webhook monitoring information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     webhook:
+ *                       type: object
+ *                       description: Current webhook subscription status
+ *                     recentActivity:
+ *                       type: object
+ *                       description: Recent webhook activity
+ *                     debugging:
+ *                       type: object
+ *                       description: Debugging tips and information
+ *                     environment:
+ *                       type: object
+ *                       description: Environment configuration
+ *       401:
+ *         description: Unauthorized - Admin access required
  */
 adminRouter.get(
   "/webhook/monitor",
