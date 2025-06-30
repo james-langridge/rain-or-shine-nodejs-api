@@ -57,8 +57,6 @@ const createDatabase = () => {
     throw new Error("DATABASE_URL environment variable is required");
   }
 
-  // For now, completely disable SSL to fix the Coolify deployment issue
-  // The Coolify PostgreSQL database doesn't support SSL connections
   const pool = new Pool({
     connectionString,
     max: parseInt(process.env.DB_POOL_MAX || "20", 10),
@@ -67,7 +65,7 @@ const createDatabase = () => {
       process.env.DB_CONNECTION_TIMEOUT || "10000",
       10,
     ),
-    ssl: false, // Disable SSL completely
+    ssl: false, // SSL disabled - PostgreSQL and app are on same isolated Docker network
   });
 
   logger.info("Database connection configuration", {
