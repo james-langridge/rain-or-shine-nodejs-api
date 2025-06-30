@@ -1,7 +1,7 @@
 {
-  "name": "server",
+  "name": "rain-or-shine",
   "version": "1.0.0",
-  "description": "Express API for Strava Weather Integration",
+  "description": "Express API for Strava activity weather integration",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

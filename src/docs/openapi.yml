@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Strava Weather API
+  title: Rain or Shine API
   version: 1.0.0
   description: |
     API for automatically adding weather data to Strava activities.

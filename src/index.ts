@@ -50,7 +50,7 @@ const corsOptions: cors.CorsOptions = {
     ? [
         "https://ngridge.com",
         "https://www.ngridge.com",
-        "https://strava-weather.ngridge.com",
+        "https://rain-or-shine.ngridge.com",
         "http://localhost:5173",
       ]
     : true, // Allow all in development

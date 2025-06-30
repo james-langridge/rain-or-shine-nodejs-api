@@ -1,4 +1,4 @@
-# Strava Weather Node API
+# Rain or Shine
 
 A Node.js Express API that integrates Strava activities with weather data. The application provides OAuth-based authentication with Strava and automatically enriches activities with weather information based on time and location coordinates.
 
@@ -167,7 +167,7 @@ LOG_LEVEL=info
 ```bash
 # Clone repository
 git clone <repository-url>
-cd strava-weather-node-api
+cd rain-or-shine
 
 # Install dependencies
 npm install
@@ -263,14 +263,14 @@ npm run test:coverage
 
 ```bash
 # Build production image
-docker build -t strava-weather-api .
+docker build -t rain-or-shine-api .
 
 # Run with environment variables
 docker run -d \
-  --name strava-weather-api \
+  --name rain-or-shine-api \
   -p 3001:3001 \
   --env-file .env \
-  strava-weather-api
+  rain-or-shine-api
 ```
 
 ### Production Features

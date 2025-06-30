@@ -28,7 +28,7 @@ export const sessionConfig: session.SessionOptions = {
     secure: config.isProduction, // HTTPS only in production
     sameSite: "lax",
   },
-  name: "strava-weather-session",
+  name: "rain-or-shine-session",
 };
 
 declare module "express-session" {

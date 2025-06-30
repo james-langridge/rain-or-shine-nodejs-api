@@ -91,7 +91,7 @@ authRouter.post("/logout", (req: Request, res: Response) => {
         logger.error("Session destruction error", sessionErr);
       }
 
-      res.clearCookie("strava-weather-session");
+      res.clearCookie("rain-or-shine-session");
 
       logger.info("User logged out", {
         userId,
@@ -176,7 +176,7 @@ authRouter.delete(
     // Logout
     req.logout(() => {
       req.session.destroy(() => {
-        res.clearCookie("strava-weather-session");
+        res.clearCookie("rain-or-shine-session");
 
         return res.json({
           success: true,
