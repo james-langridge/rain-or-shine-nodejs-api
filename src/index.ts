@@ -7,13 +7,8 @@ import { sessionConfig } from "./config/session";
 import { config } from "./config/environment";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
-import {
-  standardRateLimit,
-  strictRateLimit,
-  webhookRateLimit,
-  healthCheckRateLimit,
-} from "./middleware/rateLimiter";
 import { logger } from "./utils/logger";
+import rateLimit from "express-rate-limit";
 
 // Route imports
 import { healthRouter } from "./routes/health";
@@ -77,30 +72,33 @@ app.use(passport.session());
 
 app.use(requestLogger);
 
-/**
- * Rate limiting configuration
- * Applied before routes but after authentication middleware
- */
 const API_PREFIX = "/api";
 
-// Health endpoints - no rate limiting but with logging
-app.use(`${API_PREFIX}/health`, healthCheckRateLimit, healthRouter);
+app.use(
+  `${API_PREFIX}/strava/webhook`,
+  rateLimit({
+    windowMs: 60 * 1000,
+    limit: 1000,
+  }),
+);
 
-// Webhook endpoint - high rate limit for Strava bursts
-app.use(`${API_PREFIX}/strava/webhook`, webhookRateLimit);
+app.use(
+  `${API_PREFIX}/auth`,
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10, // 10 auth attempts per 15 min per IP
+    message: "Too many login attempts",
+  }),
+  authRouter,
+);
 
-// Auth endpoints - strict rate limiting
-app.use(`${API_PREFIX}/auth`, strictRateLimit, authRouter);
-
-// All other API endpoints - standard rate limiting
-app.use(`${API_PREFIX}/strava`, standardRateLimit, stravaRouter);
-app.use(`${API_PREFIX}/users`, standardRateLimit, usersRouter);
-app.use(`${API_PREFIX}/activities`, standardRateLimit, activitiesRouter);
-app.use(`${API_PREFIX}/admin`, standardRateLimit, adminRouter);
-app.use(`${API_PREFIX}/metrics`, standardRateLimit, metricsRouter);
-
-// Documentation endpoint - no rate limiting needed
+app.use(`${API_PREFIX}/strava`, stravaRouter);
+app.use(`${API_PREFIX}/users`, usersRouter);
+app.use(`${API_PREFIX}/activities`, activitiesRouter);
+app.use(`${API_PREFIX}/admin`, adminRouter);
+app.use(`${API_PREFIX}/metrics`, metricsRouter);
 app.use(`${API_PREFIX}/docs`, docsRouter);
+app.use(`${API_PREFIX}/health`, healthRouter);
 
 /**
  * Custom error handler
