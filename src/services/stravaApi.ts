@@ -1,6 +1,7 @@
 import { config } from "../config/environment";
 import { logger } from "../utils/logger";
 import { metricsService } from "./metricsService";
+import Bottleneck from "bottleneck";
 
 /**
  * Strava API service
@@ -53,6 +54,41 @@ export class StravaApiService {
   private readonly baseUrl = "https://www.strava.com/api/v3";
   private readonly tokenRefreshBuffer = 5 * 60 * 1000; // 5 minutes
   private readonly serviceLogger = logger.child({ service: "StravaAPI" });
+  private readonly limiter: Bottleneck;
+
+  constructor() {
+    // Configure Bottleneck for Strava's limits:
+    // - 200 requests per 15 minutes = ~13 per minute
+    // - 2000 requests per day = ~1.4 per minute
+    this.limiter = new Bottleneck({
+      minTime: 6000, // Minimum 6 seconds between requests (10/min)
+      maxConcurrent: 1, // One request at a time
+      reservoir: 180, // Start with 180 requests available
+      reservoirRefreshAmount: 180,
+      reservoirRefreshInterval: 15 * 60 * 1000, // Refill every 15 min
+
+      // Handle 429 responses automatically
+      rejectOnDrop: false,
+      retryStrategy: (retryCount: number, error: { statusCode: number }) => {
+        if (error?.statusCode === 429) {
+          // Exponential backoff: 5s, 10s, 20s
+          return 5000 * Math.pow(2, retryCount);
+        }
+        return null; // Don't retry other errors
+      },
+    });
+
+    // Listen for rate limit warnings
+    this.limiter.on("error", (error) => {
+      this.serviceLogger.error("Rate limiter error", { error });
+    });
+
+    this.limiter.on("depleted", () => {
+      this.serviceLogger.warn(
+        "Rate limit reservoir depleted - queueing requests",
+      );
+    });
+  }
 
   /**
    * Get activity from Strava
@@ -61,54 +97,61 @@ export class StravaApiService {
     activityId: string,
     accessToken: string,
   ): Promise<StravaActivity> {
-    this.serviceLogger.debug("Fetching activity from Strava", { activityId });
-    const startTime = Date.now();
+    return this.limiter.schedule(async () => {
+      this.serviceLogger.debug("Fetching activity from Strava", { activityId });
+      const startTime = Date.now();
 
-    try {
-      const response = await fetch(`${this.baseUrl}/activities/${activityId}`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
+      try {
+        const response = await fetch(
+          `${this.baseUrl}/activities/${activityId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          },
+        );
 
-      const duration = Date.now() - startTime;
-      await metricsService.recordApiCall(
-        "strava_api",
-        `GET /activities/${activityId}`,
-        duration,
-        response.status,
-      );
+        const duration = Date.now() - startTime;
+        await metricsService.recordApiCall(
+          "strava_api",
+          `GET /activities/${activityId}`,
+          duration,
+          response.status,
+        );
 
-      if (!response.ok) {
-        await this.handleApiError(response, "getActivity", { activityId });
+        this.logRateLimits(response, `GET /activities/${activityId}`);
+
+        if (!response.ok) {
+          await this.handleApiError(response, "getActivity", { activityId });
+        }
+
+        const activity: StravaActivity = await response.json();
+
+        this.serviceLogger.info("Activity retrieved successfully", {
+          activityId,
+          activityName: activity.name,
+          activityType: activity.type,
+        });
+
+        return activity;
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        await metricsService.recordApiCall(
+          "strava_api",
+          `GET /activities/${activityId}`,
+          duration,
+          undefined,
+          error instanceof Error ? error.message : "Unknown error",
+        );
+
+        this.serviceLogger.error("Failed to fetch activity", {
+          activityId,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        throw error;
       }
-
-      const activity: StravaActivity = await response.json();
-
-      this.serviceLogger.info("Activity retrieved successfully", {
-        activityId,
-        activityName: activity.name,
-        activityType: activity.type,
-      });
-
-      return activity;
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      await metricsService.recordApiCall(
-        "strava_api",
-        `GET /activities/${activityId}`,
-        duration,
-        undefined,
-        error instanceof Error ? error.message : "Unknown error",
-      );
-
-      this.serviceLogger.error("Failed to fetch activity", {
-        activityId,
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-      throw error;
-    }
+    });
   }
 
   /**
@@ -119,40 +162,47 @@ export class StravaApiService {
     accessToken: string,
     updateData: StravaUpdateData,
   ): Promise<StravaActivity> {
-    this.serviceLogger.debug("Updating activity on Strava", {
-      activityId,
-      updateFields: Object.keys(updateData),
-    });
-
-    try {
-      const response = await fetch(`${this.baseUrl}/activities/${activityId}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updateData),
+    return this.limiter.schedule(async () => {
+      this.serviceLogger.debug("Updating activity on Strava", {
+        activityId,
+        updateFields: Object.keys(updateData),
       });
 
-      if (!response.ok) {
-        await this.handleApiError(response, "updateActivity", { activityId });
+      try {
+        const response = await fetch(
+          `${this.baseUrl}/activities/${activityId}`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(updateData),
+          },
+        );
+
+        this.logRateLimits(response, `PUT /activities/${activityId}`);
+
+        if (!response.ok) {
+          await this.handleApiError(response, "updateActivity", { activityId });
+        }
+
+        const updatedActivity: StravaActivity = await response.json();
+
+        this.serviceLogger.info("Activity updated successfully", {
+          activityId,
+          activityName: updatedActivity.name,
+        });
+
+        return updatedActivity;
+      } catch (error) {
+        this.serviceLogger.error("Failed to update activity", {
+          activityId,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        throw error;
       }
-
-      const updatedActivity: StravaActivity = await response.json();
-
-      this.serviceLogger.info("Activity updated successfully", {
-        activityId,
-        activityName: updatedActivity.name,
-      });
-
-      return updatedActivity;
-    } catch (error) {
-      this.serviceLogger.error("Failed to update activity", {
-        activityId,
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-      throw error;
-    }
+    });
   }
 
   /**
@@ -308,6 +358,25 @@ export class StravaApiService {
     });
 
     throw new Error(errorMessage);
+  }
+
+  /**
+   * Just log the rate limits for monitoring
+   */
+  private logRateLimits(response: Response, endpoint: string): void {
+    const usage = response.headers.get("X-RateLimit-Usage");
+    const limit = response.headers.get("X-RateLimit-Limit");
+
+    if (usage && limit) {
+      const [used15min, usedDaily] = usage.split(",").map(Number);
+      const [limit15min, limitDaily] = limit.split(",").map(Number);
+
+      this.serviceLogger.info("Strava rate limit", {
+        endpoint,
+        "15min": `${used15min}/${limit15min}`,
+        daily: `${usedDaily}/${limitDaily}`,
+      });
+    }
   }
 }
 

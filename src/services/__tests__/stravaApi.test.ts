@@ -55,6 +55,15 @@ vi.mock("../metricsService", () => ({
   },
 }));
 
+// Mock Bottleneck to avoid rate limiting delays in tests
+vi.mock("bottleneck", () => {
+  const MockBottleneck = vi.fn().mockImplementation(() => ({
+    schedule: vi.fn((fn) => fn()),
+    on: vi.fn(),
+  }));
+  return { default: MockBottleneck };
+});
+
 describe("StravaApiService", () => {
   let stravaApiService: StravaApiService;
 
@@ -73,6 +82,29 @@ describe("StravaApiService", () => {
     description: "Great run in the park!",
   });
 
+  // Helper to create properly structured mock responses
+  const createMockResponse = ({
+    ok = true,
+    status = 200,
+    json = () => Promise.resolve({}),
+    text = () => Promise.resolve(""),
+    headers = new Map(),
+  } = {}) => {
+    // Create headers object with get method
+    const headersObj = {
+      get: (key: string) =>
+        headers instanceof Map ? headers.get(key) : headers[key] || null,
+    };
+
+    return {
+      ok,
+      status,
+      json,
+      text,
+      headers: headersObj,
+    };
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
@@ -84,12 +116,11 @@ describe("StravaApiService", () => {
     stravaApiService = new StravaApiService();
 
     // Default successful fetch response
-    mockFetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve(mockTokenRefreshResponse),
-      text: () => Promise.resolve(""),
-    });
+    mockFetch.mockResolvedValue(
+      createMockResponse({
+        json: () => Promise.resolve(mockTokenRefreshResponse),
+      }),
+    );
   });
 
   afterEach(() => {
@@ -124,11 +155,11 @@ describe("StravaApiService", () => {
     });
 
     it("should handle token refresh API errors", async () => {
-      const errorResponse = {
+      const errorResponse = createMockResponse({
         ok: false,
         status: 400,
         text: () => Promise.resolve("Invalid refresh token"),
-      };
+      });
       mockFetch.mockResolvedValue(errorResponse);
 
       await expect(
@@ -137,11 +168,11 @@ describe("StravaApiService", () => {
     });
 
     it("should handle unauthorized refresh attempts", async () => {
-      const unauthorizedResponse = {
+      const unauthorizedResponse = createMockResponse({
         ok: false,
         status: 401,
         text: () => Promise.resolve("Unauthorized"),
-      };
+      });
       mockFetch.mockResolvedValue(unauthorizedResponse);
 
       await expect(
@@ -158,12 +189,12 @@ describe("StravaApiService", () => {
     });
 
     it("should handle malformed response from token endpoint", async () => {
-      const malformedResponse = {
+      const malformedResponse = createMockResponse({
         ok: true,
         status: 200,
         json: () => Promise.reject(new Error("Invalid JSON")),
         text: () => Promise.resolve("Not JSON"),
-      };
+      });
       mockFetch.mockResolvedValue(malformedResponse);
 
       await expect(
@@ -268,11 +299,11 @@ describe("StravaApiService", () => {
         const refreshToken = "invalid-refresh-token";
         const expiresAt = new Date("2024-01-15T11:00:00Z"); // Expired
 
-        const errorResponse = {
+        const errorResponse = createMockResponse({
           ok: false,
           status: 400,
           text: () => Promise.resolve("Bad Request"),
-        };
+        });
         mockFetch.mockResolvedValue(errorResponse);
 
         await expect(
@@ -311,12 +342,14 @@ describe("StravaApiService", () => {
           expires_at: 1609459200, // Jan 1, 2021 00:00:00 UTC
         };
 
-        mockFetch.mockResolvedValue({
-          ok: true,
-          status: 200,
-          json: () => Promise.resolve(customTokenResponse),
-          text: () => Promise.resolve(""),
-        });
+        mockFetch.mockResolvedValue(
+          createMockResponse({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(customTokenResponse),
+            text: () => Promise.resolve(""),
+          }),
+        );
 
         const result = await stravaApiService.ensureValidToken(
           "expired-token",
@@ -331,12 +364,14 @@ describe("StravaApiService", () => {
 
   describe("getActivity", () => {
     it("should successfully fetch activity", async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(mockActivity),
-        text: () => Promise.resolve(""),
-      });
+      mockFetch.mockResolvedValue(
+        createMockResponse({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockActivity),
+          text: () => Promise.resolve(""),
+        }),
+      );
 
       const result = await stravaApiService.getActivity(
         "123456",
@@ -356,11 +391,13 @@ describe("StravaApiService", () => {
     });
 
     it("should handle activity not found", async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 404,
-        text: () => Promise.resolve("Not found"),
-      });
+      mockFetch.mockResolvedValue(
+        createMockResponse({
+          ok: false,
+          status: 404,
+          text: () => Promise.resolve("Not found"),
+        }),
+      );
 
       await expect(
         stravaApiService.getActivity("999999", "valid-token"),
@@ -368,11 +405,13 @@ describe("StravaApiService", () => {
     });
 
     it("should handle unauthorized access", async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 401,
-        text: () => Promise.resolve("Unauthorized"),
-      });
+      mockFetch.mockResolvedValue(
+        createMockResponse({
+          ok: false,
+          status: 401,
+          text: () => Promise.resolve("Unauthorized"),
+        }),
+      );
 
       await expect(
         stravaApiService.getActivity("123456", "invalid-token"),
@@ -380,11 +419,13 @@ describe("StravaApiService", () => {
     });
 
     it("should handle rate limiting", async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 429,
-        text: () => Promise.resolve("Rate limit exceeded"),
-      });
+      mockFetch.mockResolvedValue(
+        createMockResponse({
+          ok: false,
+          status: 429,
+          text: () => Promise.resolve("Rate limit exceeded"),
+        }),
+      );
 
       await expect(
         stravaApiService.getActivity("123456", "valid-token"),
@@ -403,12 +444,14 @@ describe("StravaApiService", () => {
         description: updateData.description,
       };
 
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(updatedActivity),
-        text: () => Promise.resolve(""),
-      });
+      mockFetch.mockResolvedValue(
+        createMockResponse({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(updatedActivity),
+          text: () => Promise.resolve(""),
+        }),
+      );
 
       const result = await stravaApiService.updateActivity(
         "123456",
@@ -431,11 +474,13 @@ describe("StravaApiService", () => {
     });
 
     it("should handle update permission errors", async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 403,
-        text: () => Promise.resolve("Forbidden"),
-      });
+      mockFetch.mockResolvedValue(
+        createMockResponse({
+          ok: false,
+          status: 403,
+          text: () => Promise.resolve("Forbidden"),
+        }),
+      );
 
       await expect(
         stravaApiService.updateActivity("123456", "valid-token", updateData),
@@ -443,11 +488,13 @@ describe("StravaApiService", () => {
     });
 
     it("should handle malformed update data", async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 400,
-        text: () => Promise.resolve("Bad request"),
-      });
+      mockFetch.mockResolvedValue(
+        createMockResponse({
+          ok: false,
+          status: 400,
+          text: () => Promise.resolve("Bad request"),
+        }),
+      );
 
       await expect(
         stravaApiService.updateActivity("123456", "valid-token", updateData),
@@ -457,11 +504,13 @@ describe("StravaApiService", () => {
 
   describe("revokeToken", () => {
     it("should successfully revoke token", async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve(""),
-      });
+      mockFetch.mockResolvedValue(
+        createMockResponse({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve(""),
+        }),
+      );
 
       await expect(
         stravaApiService.revokeToken("valid-token"),
@@ -480,11 +529,13 @@ describe("StravaApiService", () => {
     });
 
     it("should handle revocation errors gracefully", async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 400,
-        text: () => Promise.resolve("Bad request"),
-      });
+      mockFetch.mockResolvedValue(
+        createMockResponse({
+          ok: false,
+          status: 400,
+          text: () => Promise.resolve("Bad request"),
+        }),
+      );
 
       // Should not throw - revocation failures are logged but not critical
       await expect(
@@ -504,11 +555,13 @@ describe("StravaApiService", () => {
 
   describe("error handling edge cases", () => {
     it("should handle empty error responses", async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 500,
-        text: () => Promise.resolve(""),
-      });
+      mockFetch.mockResolvedValue(
+        createMockResponse({
+          ok: false,
+          status: 500,
+          text: () => Promise.resolve(""),
+        }),
+      );
 
       await expect(
         stravaApiService.getActivity("123456", "valid-token"),
@@ -516,11 +569,13 @@ describe("StravaApiService", () => {
     });
 
     it("should handle non-JSON error responses", async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 502,
-        text: () => Promise.resolve("<html>Bad Gateway</html>"),
-      });
+      mockFetch.mockResolvedValue(
+        createMockResponse({
+          ok: false,
+          status: 502,
+          text: () => Promise.resolve("<html>Bad Gateway</html>"),
+        }),
+      );
 
       await expect(
         stravaApiService.getActivity("123456", "valid-token"),
@@ -555,12 +610,14 @@ describe("StravaApiService", () => {
 
       // Reset fetch mock for activity call
       vi.clearAllMocks();
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(mockActivity),
-        text: () => Promise.resolve(""),
-      });
+      mockFetch.mockResolvedValue(
+        createMockResponse({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockActivity),
+          text: () => Promise.resolve(""),
+        }),
+      );
 
       // Second call: use new token to fetch activity
       const activity = await stravaApiService.getActivity(

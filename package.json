@@ -28,6 +28,7 @@
     "@types/swagger-ui-express": "^4.1.8",
     "@types/yaml": "^1.9.6",
     "axios": "^1.7.9",
+    "bottleneck": "^2.19.5",
     "connect-pg-simple": "^10.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
